@@ -1,22 +1,13 @@
-# requirements.txt - Updated for compatibility with Python 3.13 and Streamlit Cloud
+streamlit>=1.47,<2
+numpy>=2.2      # any 2.x wheel supports Py3.13
+scikit-learn>=1.5
+lightgbm>=4.6   # wheels exist for cp313
+textstat>=0.7.3
+gensim>=4.3.2
 
-# Core libraries with compatible versions
-streamlit>=1.29.0
-numpy>=1.26.0
-scikit-learn>=1.3.0
-lightgbm>=4.1.0
-textstat>=0.7.3  # Add the missing library
-gensim>=4.3.0
+# librosa stack that works with Py3.13
+librosa>=0.10.2.post3,<0.11
+numba>=0.61,<0.62
+llvmlite>=0.44,<0.45
 
-# Librosa - Use a version known to work and preferably with pre-built wheels
-# 0.10.1 is a good choice. uv or pip should find a compatible wheel.
-librosa>=0.10.1, <0.11.0
-
-# Explicitly list joblib if you use it directly in your app
-joblib
-
-# Force a compatible version of numba if librosa pulls in an incompatible one
-# Numba 0.58.x is known to work better with newer Python versions
-numba>=0.58.0; python_version>="3.11"
-# If numba causes issues, you might need to pin a specific version like:
-# numba==0.58.1
+joblib>=1.3
