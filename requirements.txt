@@ -6,6 +6,7 @@ numpy>=1.26.0
 scikit-learn>=1.3.0
 lightgbm>=4.1.0
 textstat>=0.7.3  # Add the missing library
+gensim>=4.3.0
 
 # Librosa - Use a version known to work and preferably with pre-built wheels
 # 0.10.1 is a good choice. uv or pip should find a compatible wheel.
