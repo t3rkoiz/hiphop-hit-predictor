@@ -1,0 +1,7 @@
+{
+  "timestamp": "20250724_235748",
+  "n_models": 4,
+  "oof_auc": 0.69499295339714,
+  "oof_ap": 0.4799976783147048,
+  "feature_dimensions": 812
+}
