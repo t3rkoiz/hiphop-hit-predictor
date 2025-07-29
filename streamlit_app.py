@@ -32,7 +32,7 @@ def load_model_components():
         
         # Load text processing models with comprehensive debugging
         st.info("Loading TF-IDF vectorizer...")
-        tfidf_vectorizer = joblib.load(f"{MODEL_DIR}/tfidf_vectorizer1.5_100k.pkl")
+        tfidf_vectorizer = joblib.load(f"{MODEL_DIR}/tfidf_vectorizer2_100k.pkl")
         
         # Check if the vectorizer is properly fitted
         has_vocab = hasattr(tfidf_vectorizer, 'vocabulary_')
@@ -68,7 +68,7 @@ def load_model_components():
         else:
             st.error("❌ TF-IDF vectorizer is not properly fitted")
         
-        svd_model = joblib.load(f"{MODEL_DIR}/svd_500.pkl")
+        svd_model = joblib.load(f"{MODEL_DIR}/svd2_500.pkl")
         doc2vec_model = Doc2Vec.load(f"{MODEL_DIR}/doc2vec_hiphop.bin")
         
         return models, scaler, best_params, tfidf_vectorizer, svd_model, doc2vec_model
@@ -80,8 +80,8 @@ Required files:
 - lgbm_optimized_models_latest.pkl
 - feature_scaler_optimized_latest.pkl  
 - best_params_optimized_latest.json
-- tfidf_vectorizer1.5_100k.pkl
-- svd_500.pkl
+- tfidf_vectorizer2_100k.pkl
+- svd2_500.pkl
 - doc2vec_hiphop.bin
         """)
         return None, None, None, None, None, None
@@ -116,7 +116,9 @@ def extract_audio_features(audio_file, audio_cols=None):
 
     try:
         # Load audio file
+        st.info("Loading audio file...")
         y, sr = librosa.load(tmp_path, sr=22050)
+        st.success(f"✅ Audio loaded: {len(y)} samples at {sr} Hz")
         
         features = {}
         
@@ -125,6 +127,7 @@ def extract_audio_features(audio_file, audio_cols=None):
         features['duration_ms'] = len(y) * 1000 / sr
         
         # Tempo - Improved detection
+        st.info("Extracting tempo...")
         tempo, beats = librosa.beat.beat_track(y=y, sr=sr, hop_length=512)
         
         # Try multiple tempo detection methods and choose the most reasonable
@@ -140,40 +143,45 @@ def extract_audio_features(audio_file, audio_cols=None):
                     avg_interval = np.median(onset_intervals)
                     onset_tempo = 60.0 / avg_interval
                     tempo_candidates.append(onset_tempo)
-        except:
-            pass
+        except Exception as onset_e:
+            st.warning(f"Onset detection failed: {onset_e}")
         
         # Method 3: Check for common tempo doubling/halving
         for candidate in tempo_candidates.copy():
             tempo_candidates.extend([candidate/2, candidate/4, candidate*2])
         
         # Filter to reasonable BPM range for hip-hop (60-180 BPM typically)
-        reasonable_tempos = [t for t in tempo_candidates if 60 <= t <= 180]
+        reasonable_tempos = [float(t) for t in tempo_candidates if 60 <= float(t) <= 180]
         
         if reasonable_tempos:
             # Choose the tempo closest to typical hip-hop range (80-140 BPM)
             hip_hop_center = 110
             final_tempo = min(reasonable_tempos, key=lambda x: abs(x - hip_hop_center))
         else:
-            final_tempo = tempo
+            final_tempo = float(tempo)
         
         features['tempo'] = float(final_tempo)
         
-        # Add debug info
-        st.info(f"🎵 Tempo Detection Debug:")
-        st.info(f"  - Primary detection: {tempo:.1f} BPM")
-        st.info(f"  - All candidates: {[f'{t:.1f}' for t in tempo_candidates[:5]]}")
-        st.info(f"  - Final selected: {final_tempo:.1f} BPM")
+        # Add debug info - fix numpy array formatting
+        st.info("🎵 Tempo Detection Debug:")
+        st.info(f"  - Primary detection: {float(tempo):.1f} BPM")
+        tempo_list = [float(t) for t in tempo_candidates[:5]]  # Convert to regular floats
+        tempo_str = ", ".join([f"{t:.1f}" for t in tempo_list])
+        st.info(f"  - All candidates: {tempo_str}")
+        st.info(f"  - Final selected: {float(final_tempo):.1f} BPM")
         
         # Loudness (approximation)
+        st.info("Extracting loudness...")
         rms = librosa.feature.rms(y=y)[0]
         features['loudness'] = float(20 * np.log10(np.mean(rms) + 1e-8))
         
         # Energy (approximation)
+        st.info("Extracting energy...")
         spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
         features['energy'] = float(np.clip(np.mean(spectral_centroids) / 5000, 0, 1))
         
         # Danceability (approximation based on beat strength)
+        st.info("Extracting danceability...")
         onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
         features['danceability'] = float(np.clip(len(onset_frames) / (len(y) / sr) / 10, 0, 1))
         
@@ -181,28 +189,35 @@ def extract_audio_features(audio_file, audio_cols=None):
         features['acousticness'] = float(np.clip(1 - (np.mean(spectral_centroids) / 5000), 0, 1))
         
         # Speechiness (approximation using zero crossing rate)
+        st.info("Extracting speechiness...")
         zcr = librosa.feature.zero_crossing_rate(y)[0]
         features['speechiness'] = float(np.clip(np.mean(zcr) * 10, 0, 1))
         
         # Instrumentalness (approximation - inverse of vocal activity)
-        # Simple heuristic: low variance in spectral features suggests less vocals
+        st.info("Extracting instrumentalness...")
         mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
         features['instrumentalness'] = float(np.clip(1 - np.var(mfccs) / 100, 0, 1))
         
         # Liveness (approximation using spectral flatness)
+        st.info("Extracting liveness...")
         spectral_flatness = librosa.feature.spectral_flatness(y=y)[0]
         features['liveness'] = float(np.clip(np.mean(spectral_flatness) * 5, 0, 1))
         
         # Valence (approximation using chroma features)
+        st.info("Extracting valence...")
         chroma = librosa.feature.chroma_stft(y=y, sr=sr)
         # Major chords (C, E, G) tend to sound happier
         major_chord_strength = np.mean([chroma[0], chroma[4], chroma[7]])
         features['valence'] = float(np.clip(major_chord_strength, 0, 1))
         
+        st.success("✅ All audio features extracted successfully!")
         return features
         
     except Exception as e:
-        st.error(f"Error extracting audio features: {str(e)}")
+        st.error(f"Error extracting audio features: {type(e).__name__}: {str(e)}")
+        import traceback
+        st.text("Full traceback:")
+        st.text(traceback.format_exc())
         return {}
     finally:
         # Clean up temporary file
