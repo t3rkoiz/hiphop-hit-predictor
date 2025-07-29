@@ -328,8 +328,9 @@ def main():
     
     # Manual inputs for song information
     st.subheader("🎼 Song Information")
-    st.info("Please provide these details about your song:")
+    st.info("Enter all song details manually for precise testing:")
     
+    # Basic song info
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -357,6 +358,50 @@ def main():
                                    min_value=60, max_value=200, value=120,
                                    help="Enter the beats per minute for your song")
     
+    # Manual Spotify Features
+    st.subheader("🎵 Manual Spotify Features")
+    st.info("💡 Tip: Get real Spotify feature values from the Spotify Web API for accurate testing!")
+    
+    # Audio features that are typically 0-1
+    st.markdown("**Musical Characteristics (0.0 - 1.0):**")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        danceability = st.number_input("Danceability", min_value=0.0, max_value=1.0, value=0.5, step=0.01,
+                                      help="How suitable a track is for dancing (0.0 = not danceable, 1.0 = very danceable)")
+        energy = st.number_input("Energy", min_value=0.0, max_value=1.0, value=0.5, step=0.01,
+                                help="Perceptual measure of intensity and activity (0.0 = low energy, 1.0 = high energy)")
+        valence = st.number_input("Valence", min_value=0.0, max_value=1.0, value=0.5, step=0.01,
+                                 help="Musical positiveness (0.0 = sad/angry, 1.0 = happy/euphoric)")
+    
+    with col2:
+        acousticness = st.number_input("Acousticness", min_value=0.0, max_value=1.0, value=0.1, step=0.01,
+                                      help="Confidence the track is acoustic (0.0 = not acoustic, 1.0 = acoustic)")
+        speechiness = st.number_input("Speechiness", min_value=0.0, max_value=1.0, value=0.1, step=0.01,
+                                     help="Presence of spoken words (0.0 = no speech, 1.0 = speech-like)")
+        instrumentalness = st.number_input("Instrumentalness", min_value=0.0, max_value=1.0, value=0.1, step=0.01,
+                                          help="Predicts whether track contains no vocals (0.0 = vocals, 1.0 = no vocals)")
+    
+    with col3:
+        liveness = st.number_input("Liveness", min_value=0.0, max_value=1.0, value=0.1, step=0.01,
+                                  help="Detects presence of audience (0.0 = studio, 1.0 = live performance)")
+    
+    # Other features
+    st.markdown("**Technical Features:**")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        loudness = st.number_input("Loudness (dB)", min_value=-60.0, max_value=5.0, value=-10.0, step=0.1,
+                                  help="Overall loudness in decibels (typically -60 to 0 dB)")
+    
+    with col2:
+        duration_ms = st.number_input("Duration (seconds)", min_value=30, max_value=600, value=180, step=1,
+                                     help="Song duration in seconds") * 1000  # Convert to milliseconds
+    
+    # Option to load from audio or use manual values
+    use_manual_features = st.checkbox("🔧 Use manual feature values (ignore audio analysis)", value=False,
+                                     help="Check this to use only the manual values above, or uncheck to extract from uploaded audio")
+    
     if uploaded_file is not None:
         # Display audio player
         st.audio(uploaded_file, format='audio/mp3')
@@ -376,12 +421,45 @@ def main():
             )
         
         # Display extracted features
-        st.subheader("🎵 Extracted Audio Features")
+        st.subheader("🎵 Audio Features Summary")
+        
+        # Primary features (most important for users to see)
+        st.markdown("**Key Audio Characteristics:**")
         cols = st.columns(4)
         cols[0].metric("Tempo", f"{tempo_bpm} BPM", help="User provided")
         cols[1].metric("Danceability", f"{audio_features.get('danceability', 0):.3f}")
         cols[2].metric("Energy", f"{audio_features.get('energy', 0):.3f}")
         cols[3].metric("Valence", f"{audio_features.get('valence', 0):.3f}")
+        
+        # Secondary features (in an expandable section)
+        with st.expander("📊 View All 12 Audio Features"):
+            cols2 = st.columns(3)
+            with cols2[0]:
+                st.metric("Loudness", f"{audio_features.get('loudness', 0):.1f} dB")
+                st.metric("Acousticness", f"{audio_features.get('acousticness', 0):.3f}")
+                st.metric("Speechiness", f"{audio_features.get('speechiness', 0):.3f}")
+                st.metric("Duration", f"{audio_features.get('duration_ms', 0)/1000:.1f} sec")
+            
+            with cols2[1]:
+                st.metric("Instrumentalness", f"{audio_features.get('instrumentalness', 0):.3f}")
+                st.metric("Liveness", f"{audio_features.get('liveness', 0):.3f}")
+                st.metric("Key", f"{key_name}")
+                st.metric("Time Signature", f"{time_sig_display}")
+            
+            with cols2[2]:
+                st.info("**Feature Descriptions:**")
+                st.markdown("""
+                - **Danceability**: How suitable for dancing (0-1)
+                - **Energy**: Intensity and activity (0-1)  
+                - **Valence**: Musical positiveness (0-1)
+                - **Acousticness**: Confidence it's acoustic (0-1)
+                - **Speechiness**: Presence of spoken words (0-1)
+                - **Instrumentalness**: Likelihood of no vocals (0-1)
+                - **Liveness**: Live audience presence (0-1)
+                - **Loudness**: Overall volume in decibels
+                """)
+                
+        st.info("ℹ️ All 12 features are used in the prediction model")
         
         # Display feature processing info
         st.subheader("📊 Feature Processing Status")
@@ -400,6 +478,31 @@ def main():
         if st.button("🔮 Predict Hit Potential", type="primary", use_container_width=True):
             with st.spinner("Analyzing your song with full feature set..."):
                 try:
+                    # Debug: Show feature ranges to help identify issues
+                    st.subheader("🔍 Feature Debug Information")
+                    with st.expander("View feature ranges for debugging"):
+                        st.write("**Audio Features:**")
+                        for feat in ['danceability', 'energy', 'valence', 'acousticness', 'speechiness', 'instrumentalness', 'liveness']:
+                            val = audio_features.get(feat, 0)
+                            if not (0 <= val <= 1):
+                                st.warning(f"⚠️ {feat}: {val:.3f} (should be 0-1)")
+                            else:
+                                st.info(f"✅ {feat}: {val:.3f}")
+                        
+                        st.write("**Other Features:**")
+                        st.info(f"Tempo: {tempo_bpm} BPM")
+                        st.info(f"Loudness: {audio_features.get('loudness', 0):.1f} dB")
+                        st.info(f"Duration: {audio_features.get('duration_ms', 0)/1000:.1f} seconds")
+                        
+                        st.write("**Text Features:**")
+                        st.info(f"SVD features (500): min={np.min(svd_features):.3f}, max={np.max(svd_features):.3f}")
+                        st.info(f"Doc2Vec features (300): min={np.min(doc2vec_features):.3f}, max={np.max(doc2vec_features):.3f}")
+                        
+                        if lyrics_text.strip():
+                            st.info(f"Lyrics provided: {len(lyrics_text.split())} words")
+                        else:
+                            st.warning("⚠️ No lyrics provided - this significantly impacts prediction!")
+                    
                     # Set the manual tempo
                     audio_features['tempo'] = float(tempo_bpm)
                     st.info(f"🎵 Using tempo: {tempo_bpm} BPM")
