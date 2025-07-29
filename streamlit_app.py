@@ -369,7 +369,7 @@ def main():
     
     with col3:
         manual_tempo = st.number_input("Manual Tempo Override (BPM)", 
-                                      min_value=60, max_value=200, value=0,
+                                      min_value=0, max_value=200, value=0,
                                       help="Leave at 0 to use auto-detection, or enter known BPM")
     
     if uploaded_file is not None:
@@ -417,8 +417,11 @@ def main():
                 try:
                     # Override tempo if manual input provided
                     if manual_tempo > 0:
-                        audio_features['tempo'] = float(manual_tempo)
-                        st.info(f"🎵 Using manual tempo override: {manual_tempo} BPM")
+                        if 60 <= manual_tempo <= 200:
+                            audio_features['tempo'] = float(manual_tempo)
+                            st.info(f"🎵 Using manual tempo override: {manual_tempo} BPM")
+                        else:
+                            st.warning(f"⚠️ Manual tempo {manual_tempo} BPM is outside reasonable range (60-200). Using auto-detected tempo.")
                     
                     # Make prediction (removed mode_value parameter)
                     probability = predict_hit(
