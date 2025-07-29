@@ -32,7 +32,7 @@ def load_model_components():
         
         # Load text processing models with comprehensive debugging
         st.info("Loading TF-IDF vectorizer...")
-        tfidf_vectorizer = joblib.load(f"{MODEL_DIR}/tfidf_vectorizer_100k.pkl")
+        tfidf_vectorizer = joblib.load(f"{MODEL_DIR}/tfidf_vectorizer2_100k.pkl")
         
         # Check if the vectorizer is properly fitted
         has_vocab = hasattr(tfidf_vectorizer, 'vocabulary_')
@@ -68,7 +68,7 @@ def load_model_components():
         else:
             st.error("❌ TF-IDF vectorizer is not properly fitted")
         
-        svd_model = joblib.load(f"{MODEL_DIR}/svd_500.pkl")
+        svd_model = joblib.load(f"{MODEL_DIR}/svd2_500.pkl")
         doc2vec_model = Doc2Vec.load(f"{MODEL_DIR}/doc2vec_hiphop.bin")
         
         return models, scaler, best_params, tfidf_vectorizer, svd_model, doc2vec_model
@@ -80,8 +80,8 @@ Required files:
 - lgbm_optimized_models_latest.pkl
 - feature_scaler_optimized_latest.pkl  
 - best_params_optimized_latest.json
-- tfidf_vectorizer_100k.pkl
-- svd_500.pkl
+- tfidf_vectorizer2_100k.pkl
+- svd2_500.pkl
 - doc2vec_hiphop.bin
         """)
         return None, None, None, None, None, None
@@ -124,9 +124,46 @@ def extract_audio_features(audio_file, audio_cols=None):
         # Duration
         features['duration_ms'] = len(y) * 1000 / sr
         
-        # Tempo
-        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-        features['tempo'] = float(tempo)
+        # Tempo - Improved detection
+        tempo, beats = librosa.beat.beat_track(y=y, sr=sr, hop_length=512)
+        
+        # Try multiple tempo detection methods and choose the most reasonable
+        tempo_candidates = [tempo]
+        
+        # Method 2: Using onset detection
+        try:
+            onset_frames = librosa.onset.onset_detect(y=y, sr=sr, hop_length=512)
+            if len(onset_frames) > 1:
+                onset_times = librosa.frames_to_time(onset_frames, sr=sr, hop_length=512)
+                onset_intervals = np.diff(onset_times)
+                if len(onset_intervals) > 0:
+                    avg_interval = np.median(onset_intervals)
+                    onset_tempo = 60.0 / avg_interval
+                    tempo_candidates.append(onset_tempo)
+        except:
+            pass
+        
+        # Method 3: Check for common tempo doubling/halving
+        for candidate in tempo_candidates.copy():
+            tempo_candidates.extend([candidate/2, candidate/4, candidate*2])
+        
+        # Filter to reasonable BPM range for hip-hop (60-180 BPM typically)
+        reasonable_tempos = [t for t in tempo_candidates if 60 <= t <= 180]
+        
+        if reasonable_tempos:
+            # Choose the tempo closest to typical hip-hop range (80-140 BPM)
+            hip_hop_center = 110
+            final_tempo = min(reasonable_tempos, key=lambda x: abs(x - hip_hop_center))
+        else:
+            final_tempo = tempo
+        
+        features['tempo'] = float(final_tempo)
+        
+        # Add debug info
+        st.info(f"🎵 Tempo Detection Debug:")
+        st.info(f"  - Primary detection: {tempo:.1f} BPM")
+        st.info(f"  - All candidates: {[f'{t:.1f}' for t in tempo_candidates[:5]]}")
+        st.info(f"  - Final selected: {final_tempo:.1f} BPM")
         
         # Loudness (approximation)
         rms = librosa.feature.rms(y=y)[0]
@@ -319,7 +356,7 @@ def main():
     # Manual inputs for features that can't be extracted (removed mode)
     st.subheader("🎼 Song Information")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         key_options = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -329,6 +366,11 @@ def main():
     
     with col2:
         time_signature = st.selectbox("Time Signature", [3, 4, 5, 6, 7], index=1)
+    
+    with col3:
+        manual_tempo = st.number_input("Manual Tempo Override (BPM)", 
+                                      min_value=60, max_value=200, value=0,
+                                      help="Leave at 0 to use auto-detection, or enter known BPM")
     
     if uploaded_file is not None:
         # Display audio player
@@ -373,6 +415,11 @@ def main():
         if st.button("🔮 Predict Hit Potential", type="primary", use_container_width=True):
             with st.spinner("Analyzing your song with full feature set..."):
                 try:
+                    # Override tempo if manual input provided
+                    if manual_tempo > 0:
+                        audio_features['tempo'] = float(manual_tempo)
+                        st.info(f"🎵 Using manual tempo override: {manual_tempo} BPM")
+                    
                     # Make prediction (removed mode_value parameter)
                     probability = predict_hit(
                         models, scaler, audio_features, svd_features, doc2vec_features,
