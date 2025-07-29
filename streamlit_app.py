@@ -30,8 +30,33 @@ def load_model_components():
         with open(f"{MODEL_DIR}/best_params_optimized_latest.json", 'r') as f:
             best_params = json.load(f)
         
-        # Load text processing models
+        # Load text processing models with comprehensive debugging
+        st.info("Loading TF-IDF vectorizer...")
         tfidf_vectorizer = joblib.load(f"{MODEL_DIR}/tfidf_vectorizer_100k.pkl")
+        st.info(f"TF-IDF type: {type(tfidf_vectorizer)}")
+        st.info(f"TF-IDF attributes: {dir(tfidf_vectorizer)}")
+        
+        # Check all the critical attributes
+        has_vocab = hasattr(tfidf_vectorizer, 'vocabulary_')
+        has_idf = hasattr(tfidf_vectorizer, 'idf_')
+        has_fitted = hasattr(tfidf_vectorizer, '_tfidf')
+        
+        st.info(f"Has vocabulary_: {has_vocab}")
+        st.info(f"Has idf_: {has_idf}")
+        st.info(f"Has _tfidf: {has_fitted}")
+        
+        if has_vocab:
+            st.info(f"Vocabulary size: {len(tfidf_vectorizer.vocabulary_)}")
+        if has_idf:
+            st.info(f"IDF array shape: {tfidf_vectorizer.idf_.shape}")
+            
+        # Try a simple test transform
+        try:
+            test_result = tfidf_vectorizer.transform(["test lyrics here"])
+            st.success(f"✅ TF-IDF test transform successful: {test_result.shape}")
+        except Exception as test_e:
+            st.error(f"❌ TF-IDF test transform failed: {test_e}")
+        
         svd_model = joblib.load(f"{MODEL_DIR}/svd_500.pkl")
         doc2vec_model = Doc2Vec.load(f"{MODEL_DIR}/doc2vec_hiphop.bin")
         
@@ -144,30 +169,67 @@ def process_lyrics_with_models(lyrics_text, tfidf_vectorizer, svd_model, doc2vec
     doc2vec_features = np.zeros(300, dtype=np.float32)
     
     if not lyrics_text or lyrics_text.strip() == "":
+        st.warning("No lyrics provided - returning zero vectors")
         return svd_features, doc2vec_features
     
     try:
         # Clean lyrics
         lyrics_clean = clean_lyrics_for_tfidf(lyrics_text)
+        st.info(f"Cleaned lyrics length: {len(lyrics_clean)} characters")
+        st.info(f"Cleaned lyrics sample: '{lyrics_clean[:100]}...'")
         
         if not lyrics_clean:
+            st.warning("Lyrics became empty after cleaning")
             return svd_features, doc2vec_features
         
-        # TF-IDF + SVD processing
-        tfidf_vector = tfidf_vectorizer.transform([lyrics_clean])
+        # Comprehensive TF-IDF debugging
+        st.info("=== TF-IDF Transform Debug ===")
+        st.info(f"TF-IDF vectorizer type: {type(tfidf_vectorizer)}")
+        st.info(f"TF-IDF max_features: {getattr(tfidf_vectorizer, 'max_features', 'N/A')}")
+        st.info(f"TF-IDF ngram_range: {getattr(tfidf_vectorizer, 'ngram_range', 'N/A')}")
+        
+        # Check critical attributes again
+        if not hasattr(tfidf_vectorizer, 'vocabulary_'):
+            st.error("❌ TF-IDF vectorizer missing vocabulary_ attribute")
+            return svd_features, doc2vec_features
+            
+        if not hasattr(tfidf_vectorizer, 'idf_'):
+            st.error("❌ TF-IDF vectorizer missing idf_ attribute") 
+            return svd_features, doc2vec_features
+        
+        st.info(f"✅ Vocabulary size: {len(tfidf_vectorizer.vocabulary_)}")
+        st.info(f"✅ IDF array shape: {tfidf_vectorizer.idf_.shape}")
+        
+        # Try the transform
+        st.info("Attempting TF-IDF transform...")
+        try:
+            tfidf_vector = tfidf_vectorizer.transform([lyrics_clean])
+            st.success(f"✅ TF-IDF transform successful: {tfidf_vector.shape}")
+        except Exception as tfidf_error:
+            st.error(f"❌ TF-IDF transform failed: {type(tfidf_error).__name__}: {tfidf_error}")
+            import traceback
+            st.text(traceback.format_exc())
+            return svd_features, doc2vec_features
+        
+        # SVD transform
+        st.info("Attempting SVD transform...")
         svd_vector = svd_model.transform(tfidf_vector)
         svd_features = svd_vector[0].astype(np.float32)
+        st.success(f"✅ SVD transform successful: {svd_vector.shape}")
         
         # Doc2Vec processing
         words = lyrics_clean.split()
         if words:  # Only if we have words
             doc2vec_vector = doc2vec_model.infer_vector(words)
             doc2vec_features = doc2vec_vector.astype(np.float32)
+            st.success(f"✅ Doc2Vec successful: {doc2vec_features.shape}")
         
         return svd_features, doc2vec_features
         
     except Exception as e:
-        st.error(f"Error processing lyrics: {str(e)}")
+        st.error(f"❌ General error processing lyrics: {type(e).__name__}: {str(e)}")
+        import traceback
+        st.text(traceback.format_exc())
         return svd_features, doc2vec_features
 
 def predict_hit(models, scaler, audio_features, svd_features, doc2vec_features, 
