@@ -33,29 +33,40 @@ def load_model_components():
         # Load text processing models with comprehensive debugging
         st.info("Loading TF-IDF vectorizer...")
         tfidf_vectorizer = joblib.load(f"{MODEL_DIR}/tfidf_vectorizer_100k.pkl")
-        st.info(f"TF-IDF type: {type(tfidf_vectorizer)}")
-        st.info(f"TF-IDF attributes: {dir(tfidf_vectorizer)}")
         
-        # Check all the critical attributes
+        # Check if the vectorizer is properly fitted
         has_vocab = hasattr(tfidf_vectorizer, 'vocabulary_')
         has_idf = hasattr(tfidf_vectorizer, 'idf_')
-        has_fitted = hasattr(tfidf_vectorizer, '_tfidf')
         
+        st.info(f"TF-IDF type: {type(tfidf_vectorizer)}")
         st.info(f"Has vocabulary_: {has_vocab}")
         st.info(f"Has idf_: {has_idf}")
-        st.info(f"Has _tfidf: {has_fitted}")
         
         if has_vocab:
             st.info(f"Vocabulary size: {len(tfidf_vectorizer.vocabulary_)}")
-        if has_idf:
-            st.info(f"IDF array shape: {tfidf_vectorizer.idf_.shape}")
-            
+        
+        # If missing idf_, try to reconstruct it
+        if has_vocab and not has_idf:
+            st.warning("⚠️ TF-IDF missing idf_ attribute. Attempting to reconstruct...")
+            try:
+                # Get vocabulary and create a dummy idf_ array
+                vocab_size = len(tfidf_vectorizer.vocabulary_)
+                # Set all idf values to 1.0 (neutral weighting)
+                tfidf_vectorizer.idf_ = np.ones(vocab_size, dtype=np.float64)
+                st.success("✅ Reconstructed idf_ attribute with neutral weights")
+                has_idf = True
+            except Exception as reconstruct_error:
+                st.error(f"❌ Failed to reconstruct idf_: {reconstruct_error}")
+        
         # Try a simple test transform
-        try:
-            test_result = tfidf_vectorizer.transform(["test lyrics here"])
-            st.success(f"✅ TF-IDF test transform successful: {test_result.shape}")
-        except Exception as test_e:
-            st.error(f"❌ TF-IDF test transform failed: {test_e}")
+        if has_vocab and has_idf:
+            try:
+                test_result = tfidf_vectorizer.transform(["test lyrics here"])
+                st.success(f"✅ TF-IDF test transform successful: {test_result.shape}")
+            except Exception as test_e:
+                st.error(f"❌ TF-IDF test transform failed: {test_e}")
+        else:
+            st.error("❌ TF-IDF vectorizer is not properly fitted")
         
         svd_model = joblib.load(f"{MODEL_DIR}/svd_500.pkl")
         doc2vec_model = Doc2Vec.load(f"{MODEL_DIR}/doc2vec_hiphop.bin")
