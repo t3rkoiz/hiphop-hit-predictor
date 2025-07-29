@@ -32,7 +32,7 @@ def load_model_components():
         
         # Load text processing models with comprehensive debugging
         st.info("Loading TF-IDF vectorizer...")
-        tfidf_vectorizer = joblib.load(f"{MODEL_DIR}/tfidf_vectorizer2_100k.pkl")
+        tfidf_vectorizer = joblib.load(f"{MODEL_DIR}/tfidf_vectorizer1.5_100k.pkl")
         
         # Check if the vectorizer is properly fitted
         has_vocab = hasattr(tfidf_vectorizer, 'vocabulary_')
@@ -68,7 +68,7 @@ def load_model_components():
         else:
             st.error("❌ TF-IDF vectorizer is not properly fitted")
         
-        svd_model = joblib.load(f"{MODEL_DIR}/svd2_500.pkl")
+        svd_model = joblib.load(f"{MODEL_DIR}/svd_500.pkl")
         doc2vec_model = Doc2Vec.load(f"{MODEL_DIR}/doc2vec_hiphop.bin")
         
         return models, scaler, best_params, tfidf_vectorizer, svd_model, doc2vec_model
@@ -80,8 +80,8 @@ Required files:
 - lgbm_optimized_models_latest.pkl
 - feature_scaler_optimized_latest.pkl  
 - best_params_optimized_latest.json
-- tfidf_vectorizer2_100k.pkl
-- svd2_500.pkl
+- tfidf_vectorizer1.5_100k.pkl
+- svd_500.pkl
 - doc2vec_hiphop.bin
         """)
         return None, None, None, None, None, None
