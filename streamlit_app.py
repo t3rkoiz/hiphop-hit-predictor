@@ -337,6 +337,65 @@ def main():
                                              help="Song duration in seconds")
             duration_ms = duration_seconds * 1000
     
+    # Lyrics input
+    st.subheader("📝 Song Lyrics")
+    st.info("💡 Lyrics are crucial for accurate prediction! The model uses advanced text analysis.")
+    lyrics_text = st.text_area(
+        "Enter the complete song lyrics:",
+        height=200,
+        placeholder="Paste your lyrics here. The more complete, the better the prediction...",
+        help="The model analyzes lyrics using TF-IDF, SVD, and Doc2Vec for comprehensive text understanding."
+    )
+    
+    # Song information inputs
+    st.subheader("🎼 Song Information")
+    
+    # Basic song info
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        key_options = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        key_name = st.selectbox("Song Key", key_options, index=0)
+        key_map = {name: i for i, name in enumerate(key_options)}
+        key_clean = key_map[key_name]
+    
+    with col2:
+        mode = st.selectbox("Mode", ["Minor", "Major"], index=1)
+        mode_clean = 0 if mode == "Minor" else 1
+        
+    with col3:
+        tempo = st.number_input("Tempo (BPM)", 
+                               min_value=60, max_value=200, value=120,
+                               help="Enter the beats per minute for your song")
+    
+    # Time signature (2-digit format)
+    time_sig_options = {
+        "3/4 (Waltz)": 34,
+        "4/4 (Common)": 44, 
+        "5/4 (Irregular)": 54,
+        "6/8 (Compound)": 68,
+        "7/4 (Complex)": 74
+    }
+    time_sig_display = st.selectbox("Time Signature", list(time_sig_options.keys()), index=1)
+    time_signature = time_sig_options[time_sig_display]
+    
+    # Create audio features dictionary
+    audio_features = {
+        'danceability': float(danceability),
+        'energy': float(energy),
+        'key_clean': int(key_clean),
+        'loudness': float(loudness),
+        'mode_clean': int(mode_clean),
+        'speechiness': float(speechiness),
+        'acousticness': float(acousticness),
+        'instrumentalness': float(instrumentalness),
+        'liveness': float(liveness),
+        'valence': float(valence),
+        'tempo': float(tempo),
+        'duration_ms': float(duration_ms),
+        'time_signature': int(time_signature)
+    }
+    
     # Create audio features dictionary
     audio_features = {
         'danceability': float(danceability),
