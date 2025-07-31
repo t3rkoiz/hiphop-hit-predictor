@@ -130,52 +130,118 @@ def extract_audio_features(audio_file):
         # Acousticness (inverse of spectral centroid) - scale to 0-100
         features['acousticness'] = float(np.clip(100 - (np.mean(spectral_centroids) / 50), 0, 100))  # Scale to 0-100
         
-        # Speechiness (approximation using zero crossing rate) - scale to 0-100
+        # Speechiness (approximation using zero crossing rate and spectral features) - scale to 0-100
         st.info("Extracting speechiness...")
+        
+        # Zero crossing rate - but normalized differently for speech detection
         zcr = librosa.feature.zero_crossing_rate(y)[0]
-        features['speechiness'] = float(np.clip(np.mean(zcr) * 1000, 0, 100))  # Scale to 0-100
+        zcr_mean = np.mean(zcr)
+        zcr_var = np.var(zcr)
+        
+        # Spectral centroid - speech has specific frequency characteristics
+        spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+        centroid_mean = np.mean(spectral_centroid)
+        
+        # RMS energy variation - speech has more dynamic range
+        rms = librosa.feature.rms(y=y)[0]
+        rms_var = np.var(rms)
+        
+        # Onset detection - speech has fewer strong onsets than music
+        onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
+        onset_rate = len(onset_frames) / (len(y) / sr)  # Onsets per second
+        
+        # Speech typically has:
+        # - Moderate ZCR (0.02-0.05)
+        # - Centroid in speech range (1000-4000 Hz)
+        # - High RMS variance (dynamic speech)
+        # - Lower onset rate than percussive music
+        
+        # Normalize features
+        zcr_speech_score = 1.0 - abs(zcr_mean - 0.035) / 0.035  # Peak at 0.035
+        zcr_speech_score = np.clip(zcr_speech_score, 0, 1)
+        
+        centroid_speech_score = 1.0 - abs(centroid_mean - 2500) / 2500  # Peak at 2500 Hz
+        centroid_speech_score = np.clip(centroid_speech_score, 0, 1)
+        
+        rms_var_norm = np.clip(rms_var * 100, 0, 1)  # Higher variance = more speech-like
+        
+        onset_speech_score = np.clip(1.0 - onset_rate / 10, 0, 1)  # Fewer onsets = more speech-like
+        
+        # Combine features
+        speechiness = (
+            zcr_speech_score * 25 +
+            centroid_speech_score * 25 +
+            rms_var_norm * 25 +
+            onset_speech_score * 25
+        )
+        
+        features['speechiness'] = float(np.clip(speechiness, 0, 100))
         
         # Instrumentalness (approximation) - scale to 0-100
         st.info("Extracting instrumentalness...")
-        # Use multiple features to detect vocal presence
-        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
         
-        # Calculate spectral rolloff - vocals typically have energy in mid frequencies
-        spectral_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
-        rolloff_mean = np.mean(spectral_rolloff)
+        # For instrumental detection, we need to identify absence of vocals
+        # Use harmonic-percussive separation
+        y_harmonic, y_percussive = librosa.effects.hpss(y)
         
-        # Spectral flatness - vocals are less flat than pure instruments
-        spectral_flatness = librosa.feature.spectral_flatness(y=y)[0]
+        # 1. Harmonic ratio - vocals increase harmonic content
+        harmonic_ratio = np.sum(np.abs(y_harmonic)) / (np.sum(np.abs(y)) + 1e-6)
+        
+        # 2. Spectral flatness on harmonic component - vocals make it less flat
+        spectral_flatness = librosa.feature.spectral_flatness(y=y_harmonic)[0]
         flatness_mean = np.mean(spectral_flatness)
         
-        # MFCC statistics - focus on coefficients that capture vocal formants
-        mfcc_delta = np.diff(mfccs[1:5], axis=1)  # Temporal changes in lower MFCCs
-        mfcc_delta_energy = np.mean(np.abs(mfcc_delta))
+        # 3. MFCC variance on harmonic component - vocals increase variance
+        mfccs_harmonic = librosa.feature.mfcc(y=y_harmonic, sr=sr, n_mfcc=13)
+        mfcc_var = np.mean(np.var(mfccs_harmonic[1:5], axis=1))  # Variance of lower MFCCs
         
-        # Normalize features to 0-1 range
-        # Rolloff: typically 1000-8000 Hz, normalize assuming 8000 Hz max
-        rolloff_norm = np.clip(rolloff_mean / 8000, 0, 1)
+        # 4. Pitch confidence - continuous pitch suggests vocals
+        pitches, magnitudes = librosa.piptrack(y=y_harmonic, sr=sr)
+        # Count frames with confident pitch detection
+        pitch_confidence = np.sum(magnitudes > np.max(magnitudes) * 0.3) / magnitudes.shape[1]
         
-        # Flatness: already 0-1 range
-        flatness_norm = flatness_mean
+        # 5. Formant-like peaks in spectrum - characteristic of vocals
+        D = np.abs(librosa.stft(y_harmonic))
+        spectral_peaks = []
+        for frame in D.T:
+            if np.max(frame) > 0:
+                peaks, _ = librosa.util.peak_pick(frame, pre_max=3, post_max=3, 
+                                                 pre_avg=3, post_avg=5, delta=0.5, wait=10)
+                spectral_peaks.append(len(peaks))
+        avg_peaks = np.mean(spectral_peaks) if spectral_peaks else 0
         
-        # MFCC delta: normalize based on typical range (0-2)
-        mfcc_norm = np.clip(mfcc_delta_energy / 2, 0, 1)
+        # Normalize features
+        harmonic_norm = np.clip(harmonic_ratio, 0.3, 0.7)  # Typical range
+        flatness_norm = np.clip(flatness_mean * 10, 0, 1)  # Scale up as it's usually small
+        mfcc_var_norm = np.clip(mfcc_var / 50, 0, 1)  # Normalize to typical range
+        pitch_conf_norm = np.clip(pitch_confidence, 0, 1)
+        peaks_norm = np.clip(avg_peaks / 20, 0, 1)  # Normalize peak count
         
         # Debug info
-        st.text(f"Debug - Rolloff: {rolloff_mean:.1f}, Flatness: {flatness_mean:.4f}, MFCC delta: {mfcc_delta_energy:.4f}")
+        st.text(f"Debug - Harmonic: {harmonic_ratio:.3f}, Flatness: {flatness_mean:.4f}, "
+                f"MFCC var: {mfcc_var:.2f}, Pitch conf: {pitch_confidence:.3f}, Peaks: {avg_peaks:.1f}")
         
-        # Estimate instrumentalness
-        # High flatness + low MFCC variation + specific rolloff = more instrumental
-        # Typical instrumental music has higher flatness and lower MFCC variation
-        instrumentalness_score = (
-            flatness_norm * 50 +  # High flatness suggests instrumental
-            (1 - mfcc_norm) * 30 +  # Low MFCC variation suggests no vocals
-            (0.5 - abs(rolloff_norm - 0.5)) * 20  # Mid-range rolloff
+        # Calculate instrumentalness
+        # High instrumentalness when:
+        # - High spectral flatness (no distinct formants)
+        # - Low MFCC variance (no vocal variation)
+        # - Low pitch confidence (no clear melody)
+        # - Fewer spectral peaks (no formant structure)
+        # - Moderate harmonic ratio
+        
+        vocal_evidence = (
+            (1 - flatness_norm) * 0.25 +  # Low flatness = vocals
+            mfcc_var_norm * 0.25 +         # High variance = vocals
+            pitch_conf_norm * 0.25 +       # High pitch confidence = vocals
+            peaks_norm * 0.25              # Many peaks = vocals
         )
         
-        # Add some baseline to avoid always getting 0
-        instrumentalness = instrumentalness_score + 5  # Small baseline
+        # Invert to get instrumentalness (high when no vocals detected)
+        instrumentalness = (1 - vocal_evidence) * 100
+        
+        # Adjust for typical hip-hop range (rarely fully instrumental)
+        if instrumentalness > 50:
+            instrumentalness = instrumentalness * 0.8  # Scale down high values
         
         features['instrumentalness'] = float(np.clip(instrumentalness, 0, 100))
         
