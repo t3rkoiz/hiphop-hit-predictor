@@ -246,7 +246,7 @@ def extract_audio_features(audio_file):
             (1 - flatness_norm) * 0.25 +  # Low flatness = vocals
             mfcc_var_norm * 0.25 +         # High variance = vocals
             pitch_conf_norm * 0.25 +       # High pitch confidence = vocals
-            peaks_norm = 0.5              
+            peaks_norm == 0.5              
         )
         
         # Invert to get instrumentalness (high when no vocals detected)
