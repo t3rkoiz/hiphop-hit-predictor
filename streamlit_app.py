@@ -96,8 +96,12 @@ def extract_audio_features(audio_file):
         
         # Loudness (approximation)
         st.info("Extracting loudness...")
-        rms = librosa.feature.rms(y=y)[0]
-        features['loudness'] = float(20 * np.log10(np.mean(rms) + 1e-8))
+        # extract_audio_features()
+        rms         = librosa.feature.rms(y=y)[0]
+        loudness_db = 20 * np.log10(np.mean(rms) + 1e-8)          # –60 … 0 dB
+        loudness    = np.clip((loudness_db + 60) / 60, 0.0, 1.0)  # 0 … 1
+        features["loudness"] = float(loudness)
+
         
         # Energy (approximation) - scale to 0-100
         st.info("Extracting energy...")
@@ -461,9 +465,15 @@ def main():
                                               help="Likelihood of no vocals (0-100)")
             
         with col4:
-            loudness_db = st.number_input("Loudness (dB)", min_value=-60.0, max_value=5.0, value=-10.0, step=0.1,
-                                      help="Overall loudness in decibels")
-            loudness = loudness_db          # reuse the same value so it exists
+            loudness_db = st.number_input("Loudness (dB)",min_value=-60.0,max_value=5.0,value=-10.0,step=0.1,
+                                         help="Overall loudness of the mix (0 dB = full scale)")
+    
+    
+    
+
+
+
+
 
             
         # Technical features
@@ -563,7 +573,7 @@ def main():
                     loudness_norm = loudness
                 else:
                     # Convert from user input
-                    loudness_norm = np.clip((loudness_db + 60) / 60, 0.0, 1.0)
+                    loudness_norm = loudness
                 
                 # Tempo is always in BPM, convert to 0-1
                 tempo_norm = tempo / 200.0
