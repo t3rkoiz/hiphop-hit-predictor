@@ -208,20 +208,6 @@ def extract_audio_features(audio_file):
         # Count frames with confident pitch detection
         pitch_confidence = np.sum(magnitudes > np.max(magnitudes) * 0.3) / magnitudes.shape[1]
         
-        # 5. Formant-like peaks in spectrum - characteristic of vocals
-        D = np.abs(librosa.stft(y_harmonic))
-        spectral_peaks = []
-        for frame in D.T:
-            if np.max(frame) > 0:
-                spectral_peaks = []
-                for frame in D.T:
-                    if np.max(frame) > 0:
-                        peaks = librosa.util.peak_pick(
-                         frame, pre_max=3, post_max=3,
-                         pre_avg=3, post_avg=5, delta=0.5, wait=10
-    )
-            spectral_peaks.append(len(peaks))
-        avg_peaks = np.mean(spectral_peaks) if spectral_peaks else 0
         
         # Normalize features
         harmonic_norm = np.clip(harmonic_ratio, 0.3, 0.7)  # Typical range
@@ -246,7 +232,7 @@ def extract_audio_features(audio_file):
             (1 - flatness_norm) * 0.25 +  # Low flatness = vocals
             mfcc_var_norm * 0.25 +         # High variance = vocals
             pitch_conf_norm * 0.25 +       # High pitch confidence = vocals
-            peaks_norm == 0.5              
+            peaks_norm == 0.5              # Many peaks = vocals
         )
         
         # Invert to get instrumentalness (high when no vocals detected)
