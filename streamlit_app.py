@@ -96,10 +96,22 @@ def extract_audio_features(audio_file):
         spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
         features['energy'] = float(np.clip(np.mean(spectral_centroids) / 50, 0, 100))  # Scale to 0-100
         
-        # Danceability (approximation) - scale to 0-100
+        # Danceability (approximation) - FIXED: Better scaling
         st.info("Extracting danceability...")
-        onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
-        features['danceability'] = float(np.clip(len(onset_frames) / (len(y) / sr), 0, 100))  # Scale to 0-100
+        # Combine tempo regularity and beat strength
+        tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+        
+        # Calculate beat strength (how pronounced the beats are)
+        beat_strength = np.mean(onset_env[beats]) if len(beats) > 0 else np.mean(onset_env)
+        
+        # Tempo factor (120-140 BPM is ideal for dancing)
+        tempo_factor = 1.0 - abs(tempo - 130) / 100  # Peaks at 130 BPM
+        tempo_factor = np.clip(tempo_factor, 0, 1)
+        
+        # Combine factors and scale to 0-100
+        danceability = (beat_strength * 20 + tempo_factor * 30) * 1.5
+        features['danceability'] = float(np.clip(danceability, 0, 100))
         
         # Acousticness (inverse of spectral centroid) - scale to 0-100
         features['acousticness'] = float(np.clip(100 - (np.mean(spectral_centroids) / 50), 0, 100))  # Scale to 0-100
@@ -138,6 +150,8 @@ def extract_audio_features(audio_file):
         # Clean up temporary file
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
+
+def clean_lyrics_for_tfidf(lyrics_text):
     """Clean lyrics text similar to training preprocessing."""
     if not lyrics_text or lyrics_text.strip() == "":
         return ""
@@ -396,50 +410,6 @@ def main():
         'time_signature': int(time_signature)
     }
     
-    # Create audio features dictionary
-    audio_features = {
-        'danceability': float(danceability),
-        'energy': float(energy),
-        'key_clean': int(key_clean),
-        'loudness': float(loudness),
-        'mode_clean': int(mode_clean),
-        'speechiness': float(speechiness),
-        'acousticness': float(acousticness),
-        'instrumentalness': float(instrumentalness),
-        'liveness': float(liveness),
-        'valence': float(valence),
-        'tempo': float(tempo),
-        'duration_ms': float(duration_ms),
-        'time_signature': int(time_signature)
-    }
-    
-    # Display current features
-    st.subheader("📊 Current Feature Summary")
-    cols = st.columns(4)
-    cols[0].metric("Tempo", f"{tempo} BPM")
-    cols[1].metric("Danceability", f"{danceability}/100")
-    cols[2].metric("Energy", f"{energy}/100")
-    cols[3].metric("Valence", f"{valence}/100")
-    
-    with st.expander("📊 View All Features"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Key", f"{key_name} {mode}")
-            st.metric("Time Signature", time_sig_display)
-            st.metric("Duration", f"{duration_seconds}s")
-            st.metric("Loudness", f"{loudness} dB")
-        with col2:
-            st.metric("Acousticness", f"{acousticness}/100")
-            st.metric("Speechiness", f"{speechiness}/100")
-            st.metric("Instrumentalness", f"{instrumentalness}/100")
-            st.metric("Liveness", f"{liveness}/100")
-        with col3:
-            st.info("**Scale Used:**")
-            st.markdown("- Audio features: 0-100")
-            st.markdown("- Key: 0-11 (C=0)")
-            st.markdown("- Mode: 0=Minor, 1=Major")
-            st.markdown("- Time sig: 2-digit (4/4=44)")
-    
     # Process lyrics
     if lyrics_text.strip():
         with st.spinner("Processing lyrics..."):
@@ -452,17 +422,27 @@ def main():
         doc2vec_features = np.zeros(300, dtype=np.float32)
         st.warning("⚠️ No lyrics provided - using zero vectors for text features")
     
-    # Feature processing status
-    st.subheader("🔧 Feature Processing Status")
-    cols = st.columns(3)
-    cols[0].metric("Audio Features", "13", help="Spotify-like features (0-100 scale)")
-    cols[1].metric("TF-IDF + SVD", "500", help="Text features from lyrics")
-    cols[2].metric("Doc2Vec", "300", help="Document embeddings")
-    
     # Prediction button
     if st.button("🔮 Predict Hit Potential", type="primary", use_container_width=True):
         with st.spinner("Analyzing your song..."):
             try:
+                # Create audio features dictionary here (after all variables are defined)
+                audio_features = {
+                    'danceability': float(danceability),
+                    'energy': float(energy),
+                    'key_clean': int(key_clean),
+                    'loudness': float(loudness),
+                    'mode_clean': int(mode_clean),
+                    'speechiness': float(speechiness),
+                    'acousticness': float(acousticness),
+                    'instrumentalness': float(instrumentalness),
+                    'liveness': float(liveness),
+                    'valence': float(valence),
+                    'tempo': float(tempo),
+                    'duration_ms': float(duration_ms),
+                    'time_signature': int(time_signature)
+                }
+                
                 probability, prediction, threshold = predict_hit(
                     models, scaler, audio_features, svd_features, doc2vec_features, best_params
                 )
@@ -486,23 +466,15 @@ def main():
                     else:
                         st.info(f"🌱 DEVELOPING: {probability*100:.1f}%")
                 
-                # Detailed results
-                st.subheader("📊 Detailed Analysis")
-                col1, col2, col3 = st.columns(3)
+                # Simple metrics
+                st.subheader("📊 Analysis")
+                col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.metric("Hit Probability", f"{probability:.3f}")
-                    st.metric("Prediction", "HIT" if prediction == 1 else "NON-HIT")
+                    st.metric("Hit Probability", f"{probability*100:.1f}%")
                 
                 with col2:
-                    st.metric("Threshold Used", f"{threshold:.3f}")
-                    st.metric("Confidence", f"{abs(probability - threshold):.3f}")
-                
-                with col3:
-                    if best_params.get('performance_metrics'):
-                        perf = best_params['performance_metrics']
-                        st.metric("Model AUC", f"{perf.get('cv_auc', 0):.3f}")
-                        st.metric("Model Precision", f"{perf.get('best_precision', 0):.3f}")
+                    st.metric("Prediction", "HIT" if prediction == 1 else "NON-HIT")
                 
                 # Interpretation
                 st.markdown("**Interpretation:**")
@@ -540,12 +512,8 @@ def main():
     if best_params:
         st.markdown(f"- **Algorithm**: LightGBM Ensemble ({len(models) if models else 0} models)")
         st.markdown(f"- **Features**: 813 total (13 audio + 500 SVD + 300 Doc2Vec)")
-        st.markdown(f"- **Training**: Clean dataset with lyrics-only tracks")
-        st.markdown(f"- **Scale**: 0-100 for audio features (production-ready)")
-        
-        if 'optimization' in best_params:
-            opt = best_params['optimization']
-            st.markdown(f"- **Optimization**: {opt.get('n_trials', 'N/A')} Optuna trials")
+        st.markdown(f"- **Training**: Hip-hop dataset with lyrics analysis")
+        st.markdown(f"- **Scale**: 0-100 for audio features")
 
 if __name__ == "__main__":
     main()
