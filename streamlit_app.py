@@ -86,10 +86,13 @@ def extract_audio_features(audio_file):
         # Duration
         features['duration_ms'] = len(y) * 1000 / sr
         
-        # Loudness (approximation)
+        # Loudness in dB mapped to 0-1
         st.info("Extracting loudness...")
         rms = librosa.feature.rms(y=y)[0]
-        features['loudness'] = float(20 * np.log10(np.mean(rms) + 1e-8))
+        loudness_db = 20 * np.log10(np.mean(rms) + 1e-8)      # –60 … 0 dB
+        loudness_norm = np.clip((loudness_db + 60) / 60, 0.0, 1.0)
+        features['loudness'] = float(loudness_norm)
+
         
         # Energy (approximation) - scale to 0-100
         st.info("Extracting energy...")
@@ -423,6 +426,9 @@ def main():
                 with col4:
                     valence = st.number_input("Valence", min_value=0.0, max_value=100.0, 
                                              value=float(extracted_features.get('valence', 50)), step=1.0)
+                    loudness = st.number_input("Loudness (0-1)", min_value=0.0, max_value=1.0, value=0.2, step=0.01,
+                                            help="Average RMS loudness (0 = silent, 1 = full scale)")
+
                 
                 # Use extracted loudness and duration
                 loudness = float(extracted_features.get('loudness', -10))
