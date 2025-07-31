@@ -35,6 +35,23 @@ def load_model_components():
         svd_model = joblib.load(f"{MODEL_DIR}/svd2_500.pkl")
         doc2vec_model = Doc2Vec.load(f"{MODEL_DIR}/doc2vec_hiphop.bin")
         
+        # Check and fix TF-IDF vectorizer
+        has_vocab = hasattr(tfidf_vectorizer, 'vocabulary_')
+        has_idf = hasattr(tfidf_vectorizer, 'idf_')
+        
+        if has_vocab and not has_idf:
+            st.warning("⚠️ TF-IDF missing idf_ attribute. Reconstructing...")
+            try:
+                # Get vocabulary and create a dummy idf_ array
+                vocab_size = len(tfidf_vectorizer.vocabulary_)
+                # Set all idf values to 1.0 (neutral weighting)
+                tfidf_vectorizer.idf_ = np.ones(vocab_size, dtype=np.float64)
+                st.success("✅ Reconstructed idf_ attribute with neutral weights")
+                has_idf = True
+            except Exception as reconstruct_error:
+                st.error(f"❌ Failed to reconstruct idf_: {reconstruct_error}")
+                return None, None, None, None, None, None
+        
         # Test TF-IDF vectorizer
         try:
             test_result = tfidf_vectorizer.transform(["test lyrics here"])
