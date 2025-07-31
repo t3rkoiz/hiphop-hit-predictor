@@ -205,7 +205,7 @@ def extract_audio_features(audio_file):
         spectral_peaks = []
         for frame in D.T:
             if np.max(frame) > 0:
-                peaks, _ = librosa.util.peak_pick(frame, pre_max=3, post_max=3, 
+                peaks = librosa.util.peak_pick(frame, pre_max=3, post_max=3, 
                                                  pre_avg=3, post_avg=5, delta=0.5, wait=10)
                 spectral_peaks.append(len(peaks))
         avg_peaks = np.mean(spectral_peaks) if spectral_peaks else 0
