@@ -330,6 +330,11 @@ def predict_hit(models, scaler, audio_features, svd_features, doc2vec_features, 
         audio_vector = np.array([audio_features.get(feat, 0.0) for feat in audio_feature_order], 
                                dtype=np.float32)
         
+        # OPTIONAL: Reduce weight of instrumentalness feature (index 7)
+        # This scales down the instrumentalness value to reduce its impact
+        instrumentalness_weight = 0.3  # Reduce to 30% of original weight
+        audio_vector[7] = audio_vector[7] * instrumentalness_weight
+        
         # Combine all features: audio + SVD + Doc2Vec
         X_full = np.concatenate([audio_vector, svd_features, doc2vec_features])
         
