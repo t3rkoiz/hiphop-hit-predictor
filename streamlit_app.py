@@ -67,7 +67,77 @@ def load_model_components():
         st.error("Please ensure you have saved all required model files in the 'models' directory")
         return None, None, None, None, None, None
 
-def clean_lyrics_for_tfidf(lyrics_text):
+def extract_audio_features(audio_file):
+    """Extract basic audio features from uploaded audio file."""
+    
+    # Save uploaded file temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
+        tmp_file.write(audio_file.read())
+        tmp_path = tmp_file.name
+
+    try:
+        # Load audio file
+        st.info("Loading audio file...")
+        y, sr = librosa.load(tmp_path, sr=22050)
+        st.success(f"✅ Audio loaded: {len(y)} samples at {sr} Hz")
+        
+        features = {}
+        
+        # Duration
+        features['duration_ms'] = len(y) * 1000 / sr
+        
+        # Loudness (approximation)
+        st.info("Extracting loudness...")
+        rms = librosa.feature.rms(y=y)[0]
+        features['loudness'] = float(20 * np.log10(np.mean(rms) + 1e-8))
+        
+        # Energy (approximation) - scale to 0-100
+        st.info("Extracting energy...")
+        spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+        features['energy'] = float(np.clip(np.mean(spectral_centroids) / 50, 0, 100))  # Scale to 0-100
+        
+        # Danceability (approximation) - scale to 0-100
+        st.info("Extracting danceability...")
+        onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
+        features['danceability'] = float(np.clip(len(onset_frames) / (len(y) / sr), 0, 100))  # Scale to 0-100
+        
+        # Acousticness (inverse of spectral centroid) - scale to 0-100
+        features['acousticness'] = float(np.clip(100 - (np.mean(spectral_centroids) / 50), 0, 100))  # Scale to 0-100
+        
+        # Speechiness (approximation using zero crossing rate) - scale to 0-100
+        st.info("Extracting speechiness...")
+        zcr = librosa.feature.zero_crossing_rate(y)[0]
+        features['speechiness'] = float(np.clip(np.mean(zcr) * 1000, 0, 100))  # Scale to 0-100
+        
+        # Instrumentalness (approximation) - scale to 0-100
+        st.info("Extracting instrumentalness...")
+        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+        features['instrumentalness'] = float(np.clip(100 - np.var(mfccs), 0, 100))  # Scale to 0-100
+        
+        # Liveness (approximation using spectral flatness) - scale to 0-100
+        st.info("Extracting liveness...")
+        spectral_flatness = librosa.feature.spectral_flatness(y=y)[0]
+        features['liveness'] = float(np.clip(np.mean(spectral_flatness) * 500, 0, 100))  # Scale to 0-100
+        
+        # Valence (approximation using chroma features) - scale to 0-100
+        st.info("Extracting valence...")
+        chroma = librosa.feature.chroma_stft(y=y, sr=sr)
+        major_chord_strength = np.mean([chroma[0], chroma[4], chroma[7]])
+        features['valence'] = float(np.clip(major_chord_strength * 100, 0, 100))  # Scale to 0-100
+        
+        st.success("✅ All audio features extracted successfully!")
+        return features
+        
+    except Exception as e:
+        st.error(f"Error extracting audio features: {type(e).__name__}: {str(e)}")
+        import traceback
+        st.text("Full traceback:")
+        st.text(traceback.format_exc())
+        return {}
+    finally:
+        # Clean up temporary file
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
     """Clean lyrics text similar to training preprocessing."""
     if not lyrics_text or lyrics_text.strip() == "":
         return ""
@@ -173,87 +243,99 @@ def main():
         st.info(f"🎯 Model Performance: AUC {perf.get('cv_auc', 0):.3f} | "
                f"Optimized with {best_params.get('optimization', {}).get('n_trials', 'N/A')} trials")
     
-    # Lyrics input
-    st.subheader("📝 Song Lyrics")
-    st.info("💡 Lyrics are crucial for accurate prediction! The model uses advanced text analysis.")
-    lyrics_text = st.text_area(
-        "Enter the complete song lyrics:",
-        height=200,
-        placeholder="Paste your lyrics here. The more complete, the better the prediction...",
-        help="The model analyzes lyrics using TF-IDF, SVD, and Doc2Vec for comprehensive text understanding."
-    )
+    # File uploader
+    st.subheader("🎵 Upload Audio File (Optional)")
+    uploaded_file = st.file_uploader("Choose an audio file", type=['mp3', 'wav', 'flac', 'm4a'])
     
-    # Song information inputs
-    st.subheader("🎼 Song Information")
-    st.info("💡 Use 0-100 scale for audio features (matching your training data)")
-    
-    # Basic song info
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        key_options = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-        key_name = st.selectbox("Song Key", key_options, index=0)
-        key_map = {name: i for i, name in enumerate(key_options)}
-        key_clean = key_map[key_name]
-    
-    with col2:
-        mode = st.selectbox("Mode", ["Minor", "Major"], index=1)
-        mode_clean = 0 if mode == "Minor" else 1
+    # Feature input method selection
+    if uploaded_file is not None:
+        st.audio(uploaded_file, format='audio/mp3')
         
-    with col3:
-        tempo = st.number_input("Tempo (BPM)", 
-                               min_value=60, max_value=200, value=120,
-                               help="Enter the beats per minute for your song")
+        use_extracted = st.radio(
+            "How would you like to set audio features?",
+            ["Extract from uploaded audio", "Enter manually"],
+            help="Extract features automatically or enter precise values manually"
+        )
+        
+        if use_extracted == "Extract from uploaded audio":
+            with st.spinner("Extracting audio features..."):
+                extracted_features = extract_audio_features(uploaded_file)
+            
+            if extracted_features:
+                st.success("✅ Audio features extracted successfully!")
+                # Use extracted features as defaults, but allow user to modify
+                st.info("📝 Extracted features (you can modify these values):")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    danceability = st.number_input("Danceability", min_value=0.0, max_value=100.0, 
+                                                  value=float(extracted_features.get('danceability', 50)), step=1.0)
+                    energy = st.number_input("Energy", min_value=0.0, max_value=100.0, 
+                                            value=float(extracted_features.get('energy', 50)), step=1.0)
+                with col2:
+                    acousticness = st.number_input("Acousticness", min_value=0.0, max_value=100.0, 
+                                                  value=float(extracted_features.get('acousticness', 10)), step=1.0)
+                    speechiness = st.number_input("Speechiness", min_value=0.0, max_value=100.0, 
+                                                 value=float(extracted_features.get('speechiness', 15)), step=1.0)
+                with col3:
+                    instrumentalness = st.number_input("Instrumentalness", min_value=0.0, max_value=100.0, 
+                                                      value=float(extracted_features.get('instrumentalness', 5)), step=1.0)
+                    liveness = st.number_input("Liveness", min_value=0.0, max_value=100.0, 
+                                              value=float(extracted_features.get('liveness', 15)), step=1.0)
+                with col4:
+                    valence = st.number_input("Valence", min_value=0.0, max_value=100.0, 
+                                             value=float(extracted_features.get('valence', 50)), step=1.0)
+                
+                # Use extracted loudness and duration
+                loudness = float(extracted_features.get('loudness', -10))
+                duration_ms = float(extracted_features.get('duration_ms', 180000))
+                duration_seconds = int(duration_ms / 1000)
+                
+                st.info(f"🔊 Extracted Loudness: {loudness:.1f} dB")
+                st.info(f"⏱️ Extracted Duration: {duration_seconds} seconds")
+            else:
+                st.error("Failed to extract audio features. Please enter manually.")
+                use_extracted = "Enter manually"
     
-    # Time signature (2-digit format)
-    time_sig_options = {
-        "3/4 (Waltz)": 34,
-        "4/4 (Common)": 44, 
-        "5/4 (Irregular)": 54,
-        "6/8 (Compound)": 68,
-        "7/4 (Complex)": 74
-    }
-    time_sig_display = st.selectbox("Time Signature", list(time_sig_options.keys()), index=1)
-    time_signature = time_sig_options[time_sig_display]
-    
-    # Audio features (0-100 scale to match training data)
-    st.subheader("🎵 Audio Features (0-100 Scale)")
-    st.info("💡 Enter values 0-100 (your model was trained on this scale)")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        danceability = st.number_input("Danceability", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
-                                      help="How suitable for dancing (0-100)")
-        energy = st.number_input("Energy", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
-                                help="Intensity and activity (0-100)")
-        valence = st.number_input("Valence", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
-                                 help="Musical positiveness (0-100)")
-    
-    with col2:
-        acousticness = st.number_input("Acousticness", min_value=0.0, max_value=100.0, value=10.0, step=1.0,
-                                      help="Acoustic confidence (0-100)")
-        speechiness = st.number_input("Speechiness", min_value=0.0, max_value=100.0, value=15.0, step=1.0,
-                                     help="Spoken word presence (0-100)")
-        instrumentalness = st.number_input("Instrumentalness", min_value=0.0, max_value=100.0, value=5.0, step=1.0,
-                                          help="Likelihood of no vocals (0-100)")
-    
-    with col3:
-        liveness = st.number_input("Liveness", min_value=0.0, max_value=100.0, value=15.0, step=1.0,
-                                  help="Live audience presence (0-100)")
-    
-    # Technical features
-    st.markdown("**Technical Features:**")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        loudness = st.number_input("Loudness (dB)", min_value=-60.0, max_value=5.0, value=-10.0, step=0.1,
-                                  help="Overall loudness in decibels")
-    
-    with col2:
-        duration_seconds = st.number_input("Duration (seconds)", min_value=30, max_value=600, value=180, step=1,
-                                         help="Song duration in seconds")
-        duration_ms = duration_seconds * 1000
+    # Manual input (either by choice or if no audio uploaded)
+    if uploaded_file is None or (uploaded_file is not None and use_extracted == "Enter manually"):
+        st.subheader("🎵 Audio Features (0-100 Scale)")
+        st.info("💡 Enter values 0-100 (your model was trained on this scale)")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            danceability = st.number_input("Danceability", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
+                                          help="How suitable for dancing (0-100)")
+            energy = st.number_input("Energy", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
+                                    help="Intensity and activity (0-100)")
+            valence = st.number_input("Valence", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
+                                     help="Musical positiveness (0-100)")
+        
+        with col2:
+            acousticness = st.number_input("Acousticness", min_value=0.0, max_value=100.0, value=10.0, step=1.0,
+                                          help="Acoustic confidence (0-100)")
+            speechiness = st.number_input("Speechiness", min_value=0.0, max_value=100.0, value=15.0, step=1.0,
+                                         help="Spoken word presence (0-100)")
+            instrumentalness = st.number_input("Instrumentalness", min_value=0.0, max_value=100.0, value=5.0, step=1.0,
+                                              help="Likelihood of no vocals (0-100)")
+        
+        with col3:
+            liveness = st.number_input("Liveness", min_value=0.0, max_value=100.0, value=15.0, step=1.0,
+                                      help="Live audience presence (0-100)")
+        
+        # Technical features
+        st.markdown("**Technical Features:**")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            loudness = st.number_input("Loudness (dB)", min_value=-60.0, max_value=5.0, value=-10.0, step=0.1,
+                                      help="Overall loudness in decibels")
+        
+        with col2:
+            duration_seconds = st.number_input("Duration (seconds)", min_value=30, max_value=600, value=180, step=1,
+                                             help="Song duration in seconds")
+            duration_ms = duration_seconds * 1000
     
     # Create audio features dictionary
     audio_features = {
