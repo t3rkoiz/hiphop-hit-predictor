@@ -229,15 +229,15 @@ def predict_hit(models, scaler, audio_features, svd_features, doc2vec_features, 
         # Average predictions
         avg_probability = np.mean(predictions)
         
-        # Apply optimized threshold if available
-        threshold = best_params.get('threshold_optimization', {}).get('best_threshold', 0.5)
+        # CHANGED: Use 30% threshold instead of the optimized threshold
+        threshold = 0.3  # 30% threshold
         prediction = 1 if avg_probability >= threshold else 0
         
         return float(avg_probability), int(prediction), float(threshold)
         
     except Exception as e:
         st.error(f"Prediction error: {str(e)}")
-        return 0.5, 0, 0.5
+        return 0.5, 0, 0.3
 
 def main():
     st.set_page_config(page_title="Hip-Hop Hit Predictor", layout="wide")
@@ -461,10 +461,10 @@ def main():
                     if probability > 0.7:
                         st.success(f"🔥 HIT POTENTIAL: {probability*100:.1f}%")
                         st.balloons()
-                    elif probability > 0.5:
-                        st.warning(f"⭐ PROMISING: {probability*100:.1f}%")
+                    elif probability >= 0.3:  # CHANGED: Updated to reflect 30% threshold
+                        st.warning(f"⭐ HIT: {probability*100:.1f}%")
                     else:
-                        st.info(f"🌱 DEVELOPING: {probability*100:.1f}%")
+                        st.info(f"🌱 NON-HIT: {probability*100:.1f}%")
                 
                 # Simple metrics
                 st.subheader("📊 Analysis")
@@ -476,16 +476,19 @@ def main():
                 with col2:
                     st.metric("Prediction", "HIT" if prediction == 1 else "NON-HIT")
                 
+                # Show threshold info
+                st.info(f"ℹ️ Using threshold: 30% - Songs need ≥30% probability to be classified as HITs")
+                
                 # Interpretation
                 st.markdown("**Interpretation:**")
                 if probability > 0.8:
                     st.success("🚀 **Exceptional Potential!** Your song has characteristics very similar to major hits.")
                 elif probability > 0.6:
                     st.info("⭐ **Strong Potential!** Your song shows many characteristics of successful tracks.")
-                elif probability > 0.4:
-                    st.warning("🛠️ **Room for Improvement** - Consider refining key musical elements.")
+                elif probability >= 0.3:  # CHANGED: Updated for 30% threshold
+                    st.warning("✅ **Hit Classification** - Your song meets the criteria for a hit track.")
                 else:
-                    st.error("🔧 **Early Development** - Song needs significant work to reach hit potential.")
+                    st.error("🔧 **Non-Hit** - Song falls below the 30% hit threshold.")
                 
                 # Recommendations
                 st.subheader("💡 Recommendations")
@@ -514,6 +517,7 @@ def main():
         st.markdown(f"- **Features**: 813 total (13 audio + 500 SVD + 300 Doc2Vec)")
         st.markdown(f"- **Training**: Hip-hop dataset with lyrics analysis")
         st.markdown(f"- **Scale**: 0-100 for audio features")
+        st.markdown(f"- **Hit Threshold**: 30% probability")
 
 if __name__ == "__main__":
     main()
