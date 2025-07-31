@@ -470,8 +470,6 @@ def main():
                                               help="Likelihood of no vocals (0-100)")
             
         with col4:
-            liveness = st.number_input("Liveness", min_value=0.0, max_value=100.0, value=15.0, step=1.0,
-                                      help="Live audience presence (0-100)")
             loudness_db = st.number_input("Loudness (dB)", min_value=-60.0, max_value=5.0, value=-10.0, step=0.1,
                                       help="Overall loudness in decibels")
             loudness = loudness_db          # reuse the same value so it exists
