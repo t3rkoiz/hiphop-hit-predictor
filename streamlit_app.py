@@ -1,4 +1,37 @@
-# streamlit_app.py
+# Footer with model info
+    st.markdown("---")
+    st.markdown("**🤖 Model Information:**")
+    if best_params:
+        st.markdown(f"- **Algorithm**: LightGBM Ensemble ({len(models) if models else 0} models)")
+        st.markdown(f"- **Features**: 813 total (13 audio + 500 SVD + 300 Doc2Vec)")
+        st.markdown(f"- **Training**: Hip-hop dataset with lyrics analysis")
+        st.markdown(f"- **Scale**: 0-100 for audio features")
+        st.markdown(f"- **Hit Threshold**: 30% probability")
+    
+    # Tempo scale diagnostic
+    with st.expander("🎵 Tempo Scale Helper"):
+        st.info("If your training data had normalized tempo (0-1), use this to find the right BPM scale:")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Common Hip-Hop Tempo Ranges:**")
+            st.markdown("- Slow/Old School: 80-100 BPM")
+            st.markdown("- Standard Hip-Hop: 85-95 BPM")  
+            st.markdown("- Trap: 120-140 BPM")
+            st.markdown("- Double-time: 140-180 BPM")
+            
+        with col2:
+            st.markdown("**Test Your Scale:**")
+            test_normalized = st.number_input("Enter a normalized value (0-1) from your training data:", 
+                                            min_value=0.0, max_value=1.0, value=0.5, step=0.01)
+            
+            # Common scales
+            scales = {
+                "0-200 BPM": (0, 200),
+                "50-200 BPM": (50, 200),
+                "60-180 BPM": (60, 180),
+                "60-200 BPM": (60, 200),
+                "0-250 BPM": (0,# streamlit_app.py
 import streamlit as st
 import librosa
 import numpy as np
@@ -26,6 +59,14 @@ def load_model_components():
         # Load LightGBM models and scaler
         models = joblib.load(f"{MODEL_DIR}/lgbm_optimized_models_latest.pkl")
         scaler = joblib.load(f"{MODEL_DIR}/feature_scaler_optimized_latest.pkl")
+        
+        # DEBUG: Inspect scaler parameters for tempo (index 10 in your feature order)
+        if hasattr(scaler, 'data_min_') and hasattr(scaler, 'data_max_'):
+            st.info("🔍 Scaler type: MinMaxScaler")
+            st.info(f"Tempo range in training: {scaler.data_min_[10]:.2f} - {scaler.data_max_[10]:.2f}")
+        elif hasattr(scaler, 'mean_') and hasattr(scaler, 'scale_'):
+            st.info("🔍 Scaler type: StandardScaler")
+            st.info(f"Tempo mean: {scaler.mean_[10]:.2f}, std: {scaler.scale_[10]:.2f}")
         
         with open(f"{MODEL_DIR}/best_params_optimized_latest.json", 'r') as f:
             best_params = json.load(f)
@@ -86,13 +127,10 @@ def extract_audio_features(audio_file):
         # Duration
         features['duration_ms'] = len(y) * 1000 / sr
         
-        # Loudness in dB mapped to 0-1
+        # Loudness (approximation)
         st.info("Extracting loudness...")
         rms = librosa.feature.rms(y=y)[0]
-        loudness_db = 20 * np.log10(np.mean(rms) + 1e-8)      # –60 … 0 dB
-        loudness_norm = np.clip((loudness_db + 60) / 60, 0.0, 1.0)
-        features['loudness'] = float(loudness_norm)
-
+        features['loudness'] = float(20 * np.log10(np.mean(rms) + 1e-8))
         
         # Energy (approximation) - scale to 0-100
         st.info("Extracting energy...")
@@ -208,7 +246,7 @@ def extract_audio_features(audio_file):
         spectral_peaks = []
         for frame in D.T:
             if np.max(frame) > 0:
-                peaks = librosa.util.peak_pick(frame, pre_max=3, post_max=3, 
+                peaks, _ = librosa.util.peak_pick(frame, pre_max=3, post_max=3, 
                                                  pre_avg=3, post_avg=5, delta=0.5, wait=10)
                 spectral_peaks.append(len(peaks))
         avg_peaks = np.mean(spectral_peaks) if spectral_peaks else 0
@@ -426,16 +464,13 @@ def main():
                 with col4:
                     valence = st.number_input("Valence", min_value=0.0, max_value=100.0, 
                                              value=float(extracted_features.get('valence', 50)), step=1.0)
-                    loudness = st.number_input("Loudness (0-1)", min_value=0.0, max_value=1.0, value=0.2, step=0.01,
-                                            help="Average RMS loudness (0 = silent, 1 = full scale)")
-
                 
                 # Use extracted loudness and duration
                 loudness = float(extracted_features.get('loudness', -10))
                 duration_ms = float(extracted_features.get('duration_ms', 180000))
                 duration_seconds = int(duration_ms / 1000)
                 
-                st.info(f"🔊 Extracted Loudness: {loudness:.1f}")
+                st.info(f"🔊 Extracted Loudness: {loudness:.1f} dB")
                 st.info(f"⏱️ Extracted Duration: {duration_seconds} seconds")
             else:
                 st.error("Failed to extract audio features. Please enter manually.")
@@ -535,7 +570,7 @@ def main():
         'instrumentalness': float(instrumentalness),
         'liveness': float(liveness),
         'valence': float(valence),
-        'tempo': float(tempo),
+        'tempo': float(tempo),  # Now using normalized 0-1 value
         'duration_ms': float(duration_ms),
         'time_signature': int(time_signature)
     }
