@@ -478,7 +478,7 @@ def main():
                     st.success("🚀 **Exceptional Potential!** Your song has characteristics very similar to major hits.")
                 elif probability > 0.6:
                     st.info("⭐ **Strong Potential!** Your song shows many characteristics of successful tracks.")
-                elif probability >= 0.3:  # CHANGED: Updated for 30% threshold
+                elif probability >= 0.3:  # CHANGED: Updated for 30% threshol
                     st.warning("✅ **Hit Classification** - Your song meets the criteria for a hit track, but may need refinement.")
                 else:
                     st.error("🔧 **Non-Hit** - Song falls below the hit threshold.")
