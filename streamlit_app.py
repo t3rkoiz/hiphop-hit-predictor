@@ -561,13 +561,14 @@ def main():
                 # Create audio features dictionary here (after all variables are defined)
                 # Convert loudness from dB to 0-1 and tempo from BPM to 0-1
                 if uploaded_file is not None and use_extracted == "Extract from uploaded audio":
-                    # Use extracted loudness (already 0-1) and extracted tempo
+                    # Use extracted loudness (already 0-1)
                     loudness_norm = loudness
-                    tempo_norm = tempo_bpm / 200.0 if 'tempo_bpm' in locals() else tempo
                 else:
                     # Convert from user input
                     loudness_norm = np.clip((loudness_db + 60) / 60, 0.0, 1.0)
-                    tempo_norm = tempo_bpm / 200.0
+                
+                # Tempo is always in BPM, convert to 0-1
+                tempo_norm = tempo_bpm / 200.0
                 
                 audio_features = {
                     'danceability': float(danceability),
@@ -663,25 +664,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    # Footer with model info
-    st.markdown("---")
-    st.markdown("**🤖 Model Information:**")
-    if best_params:
-        st.markdown(f"- **Algorithm**: LightGBM Ensemble ({len(models) if models else 0} models)")
-        st.markdown(f"- **Features**: 813 total (13 audio + 500 SVD + 300 Doc2Vec)")
-        st.markdown(f"- **Training**: Hip-hop dataset with lyrics analysis")
-        st.markdown(f"- **Scale**: 0-100 for audio features")
-        st.markdown(f"- **Hit Threshold**: 30% probability")
-    
-    # Tempo scale diagnostic
-    with st.expander("🎵 Tempo Scale Helper"):
-        st.info("If your training data had normalized tempo (0-1), use this to find the right BPM scale:")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**Common Hip-Hop Tempo Ranges:**")
-            st.markdown("- Slow/Old School: 80-100 BPM")
-            st.markdown("- Standard Hip-Hop: 85-95 BPM")  
-            st.markdown("- Trap: 120-140 BPM")
-            st.markdown("- Double-time: 140-180 BPM")
