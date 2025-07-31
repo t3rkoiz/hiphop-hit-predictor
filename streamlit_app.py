@@ -456,7 +456,7 @@ def main():
                     if probability > 0.7:
                         st.success(f"🔥 HIT POTENTIAL: {probability*100:.1f}%")
                         st.balloons()
-                    elif probability >= 0.3:  # CHANGED: Updated to reflect 30% threshold
+                    elif probability >= 0.3:  
                         st.warning(f"⭐ HIT: {probability*100:.1f}%")
                     else:
                         st.info(f"🌱 NON-HIT: {probability*100:.1f}%")
@@ -479,9 +479,9 @@ def main():
                 elif probability > 0.6:
                     st.info("⭐ **Strong Potential!** Your song shows many characteristics of successful tracks.")
                 elif probability >= 0.3:  # CHANGED: Updated for 30% threshold
-                    st.warning("✅ **Hit Classification** - Your song meets the criteria for a hit track.")
+                    st.warning("✅ **Hit Classification** - Your song meets the criteria for a hit track, but may need refinement.")
                 else:
-                    st.error("🔧 **Non-Hit** - Song falls below the 30% hit threshold.")
+                    st.error("🔧 **Non-Hit** - Song falls below the hit threshold.")
                 
                 # Recommendations
                 st.subheader("💡 Recommendations")
@@ -509,8 +509,5 @@ def main():
         st.markdown(f"- **Algorithm**: LightGBM Ensemble ({len(models) if models else 0} models)")
         st.markdown(f"- **Features**: 813 total (13 audio + 500 SVD + 300 Doc2Vec)")
         st.markdown(f"- **Training**: Hip-hop dataset with lyrics analysis")
-        st.markdown(f"- **Scale**: 0-100 for audio features")
-        st.markdown(f"- **Hit Threshold**: 30% probability")
-
 if __name__ == "__main__":
     main()
