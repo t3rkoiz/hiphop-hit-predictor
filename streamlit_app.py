@@ -573,7 +573,7 @@ def main():
                     loudness_norm = loudness
                 else:
                     # Convert from user input
-                    loudness_norm = loudness
+                    loudness_norm = np.clip((loudness_db + 60) / 60, 0.0, 1.0)
                 
                 # Tempo is always in BPM, convert to 0-1
                 tempo_norm = tempo / 200.0
