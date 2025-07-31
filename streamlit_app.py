@@ -214,11 +214,10 @@ def extract_audio_features(audio_file):
         flatness_norm = np.clip(flatness_mean * 10, 0, 1)  # Scale up as it's usually small
         mfcc_var_norm = np.clip(mfcc_var / 50, 0, 1)  # Normalize to typical range
         pitch_conf_norm = np.clip(pitch_confidence, 0, 1)
-        peaks_norm = np.clip(avg_peaks / 20, 0, 1)  # Normalize peak count
         
         # Debug info
         st.text(f"Debug - Harmonic: {harmonic_ratio:.3f}, Flatness: {flatness_mean:.4f}, "
-                f"MFCC var: {mfcc_var:.2f}, Pitch conf: {pitch_confidence:.3f}, Peaks: {avg_peaks:.1f}")
+                f"MFCC var: {mfcc_var:.2f}, Pitch conf: {pitch_confidence:.3f}")
         
         # Calculate instrumentalness
         # High instrumentalness when:
@@ -227,12 +226,13 @@ def extract_audio_features(audio_file):
         # - Low pitch confidence (no clear melody)
         # - Fewer spectral peaks (no formant structure)
         # - Moderate harmonic ratio
-        
+        peaks_norm = 0.5      # neutral value
+
         vocal_evidence = (
             (1 - flatness_norm) * 0.25 +  # Low flatness = vocals
             mfcc_var_norm * 0.25 +         # High variance = vocals
             pitch_conf_norm * 0.25 +       # High pitch confidence = vocals
-            peaks_norm == 0.5              # Many peaks = vocals
+            peaks_norm * 0.25              # Many peaks = vocals
         )
         
         # Invert to get instrumentalness (high when no vocals detected)
@@ -566,7 +566,7 @@ def main():
                     loudness_norm = np.clip((loudness_db + 60) / 60, 0.0, 1.0)
                 
                 # Tempo is always in BPM, convert to 0-1
-                tempo_norm = tempo_bpm / 200.0
+                tempo_norm = tempo / 200.0
                 
                 audio_features = {
                     'danceability': float(danceability),
