@@ -455,28 +455,37 @@ def main():
                                           help="How suitable for dancing (0-100)")
             energy = st.number_input("Energy", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
                                     help="Intensity and activity (0-100)")
-            valence = st.number_input("Valence", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
-                                     help="Musical positiveness (0-100)")
-        
+            
         with col2:
             acousticness = st.number_input("Acousticness", min_value=0.0, max_value=100.0, value=10.0, step=1.0,
                                           help="Acoustic confidence (0-100)")
             speechiness = st.number_input("Speechiness", min_value=0.0, max_value=100.0, value=15.0, step=1.0,
                                          help="Spoken word presence (0-100)")
-            instrumentalness = st.number_input("Instrumentalness", min_value=0.0, max_value=100.0, value=5.0, step=1.0,
-                                              help="Likelihood of no vocals (0-100)")
+            
         
         with col3:
             liveness = st.number_input("Liveness", min_value=0.0, max_value=100.0, value=15.0, step=1.0,
                                       help="Live audience presence (0-100)")
-        
+            instrumentalness = st.number_input("Instrumentalness", min_value=0.0, max_value=100.0, value=5.0, step=1.0,
+                                              help="Likelihood of no vocals (0-100)")
+            
+        with col4:
+            liveness = st.number_input("Liveness", min_value=0.0, max_value=100.0, value=15.0, step=1.0,
+                                      help="Live audience presence (0-100)")
+            loudness_db = st.number_input("Loudness (dB)", min_value=-60.0, max_value=5.0, value=-10.0, step=0.1,
+                                      help="Overall loudness in decibels")
+            loudness = loudness_db          # reuse the same value so it exists
+
+            
         # Technical features
         st.markdown("**Technical Features:**")
         col1, col2 = st.columns(2)
         
         with col1:
-            loudness_db = st.number_input("Loudness (dB)", min_value=-60.0, max_value=5.0, value=-10.0, step=0.1,
-                                      help="Overall loudness in decibels")
+            
+            valence = st.number_input("Valence", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
+                                     help="Musical positiveness (0-100)")
+        
         
         with col2:
             duration_seconds = st.number_input("Duration (seconds)", min_value=30, max_value=600, value=180, step=1,
