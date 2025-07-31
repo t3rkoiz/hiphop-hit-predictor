@@ -1,6 +1,91 @@
 {
-  "learning_rate": 0.018399227922801017,
-  "num_leaves": 102,
-  "max_depth": 13,
-  "min_data_in_leaf": 50
+  "optimization": {
+    "best_auc": 0.6451305643652576,
+    "best_trial": 43,
+    "optimization_time_minutes": 198.58458292484283,
+    "n_trials": 50
+  },
+  "best_params": {
+    "learning_rate": 0.02221545090793071,
+    "num_leaves": 129,
+    "max_depth": 14,
+    "lambda_l1": 3.520259715779187e-07,
+    "lambda_l2": 0.013724013535891326,
+    "min_data_in_leaf": 57,
+    "feature_fraction": 0.5750348437171401,
+    "bagging_fraction": 0.9744952582936105,
+    "bagging_freq": 4,
+    "is_unbalance": false,
+    "objective": "binary",
+    "metric": "auc",
+    "boosting_type": "gbdt",
+    "verbose": -1,
+    "seed": 42,
+    "force_col_wise": true
+  },
+  "performance_metrics": {
+    "cv_auc": 0.6479661706025737,
+    "test_auc": 0.9310077434493401,
+    "cv_ap": 0.49962189380738814,
+    "test_ap": 0.8887122693872165,
+    "cv_auc_mean": 0.6480183714021333,
+    "cv_auc_std": 0.0027085400938078948,
+    "cv_ap_mean": 0.4997454686058231,
+    "cv_ap_std": 0.0028678672633740618
+  },
+  "threshold_optimization": {
+    "target_recall": 0.18,
+    "best_threshold": 0.48648056387901306,
+    "best_precision": 0.5734637465447586,
+    "best_recall": 0.1800112131567706
+  },
+  "confusion_matrix": {
+    "true_negatives": 125103,
+    "false_positives": 10030,
+    "false_negatives": 61427,
+    "true_positives": 13485
+  },
+  "feature_analysis": {
+    "total_features": 813,
+    "audio_importance_total": 161500.65826892853,
+    "svd_importance_total": 609793.4708938599,
+    "doc2vec_importance_total": 524888.217915535,
+    "top_audio_features": [
+      [
+        "loudness",
+        41073.08314371109
+      ],
+      [
+        "danceability",
+        26630.70030784607
+      ],
+      [
+        "speechiness",
+        25174.050199985504
+      ],
+      [
+        "duration_ms",
+        14953.976873397827
+      ],
+      [
+        "valence",
+        12850.954982757568
+      ]
+    ]
+  },
+  "dataset_info": {
+    "clean_approach": true,
+    "lyrics_only": true,
+    "total_samples": 210045,
+    "train_samples": 168036,
+    "test_samples": 42009,
+    "hit_rate": 0.3566473850841486,
+    "feature_scale": "0-100 (Streamlit compatible)"
+  },
+  "model_config": {
+    "ensemble_size": 5,
+    "cv_folds": 5,
+    "early_stopping_rounds": 100,
+    "max_boost_rounds": 1000
+  }
 }

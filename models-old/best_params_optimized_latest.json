@@ -1,0 +1,6 @@
+{
+  "learning_rate": 0.018399227922801017,
+  "num_leaves": 102,
+  "max_depth": 13,
+  "min_data_in_leaf": 50
+}

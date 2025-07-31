@@ -30,157 +30,37 @@ def load_model_components():
         with open(f"{MODEL_DIR}/best_params_optimized_latest.json", 'r') as f:
             best_params = json.load(f)
         
-        # Load text processing models with comprehensive debugging
-        st.info("Loading TF-IDF vectorizer...")
+        # Load text processing models
         tfidf_vectorizer = joblib.load(f"{MODEL_DIR}/tfidf_vectorizer2_100k.pkl")
-        
-        # Check if the vectorizer is properly fitted
-        has_vocab = hasattr(tfidf_vectorizer, 'vocabulary_')
-        has_idf = hasattr(tfidf_vectorizer, 'idf_')
-        
-        st.info(f"TF-IDF type: {type(tfidf_vectorizer)}")
-        st.info(f"Has vocabulary_: {has_vocab}")
-        st.info(f"Has idf_: {has_idf}")
-        
-        if has_vocab:
-            st.info(f"Vocabulary size: {len(tfidf_vectorizer.vocabulary_)}")
-        
-        # If missing idf_, try to reconstruct it
-        if has_vocab and not has_idf:
-            st.warning("⚠️ TF-IDF missing idf_ attribute. Attempting to reconstruct...")
-            try:
-                # Get vocabulary and create a dummy idf_ array
-                vocab_size = len(tfidf_vectorizer.vocabulary_)
-                # Set all idf values to 1.0 (neutral weighting)
-                tfidf_vectorizer.idf_ = np.ones(vocab_size, dtype=np.float64)
-                st.success("✅ Reconstructed idf_ attribute with neutral weights")
-                has_idf = True
-            except Exception as reconstruct_error:
-                st.error(f"❌ Failed to reconstruct idf_: {reconstruct_error}")
-        
-        # Try a simple test transform
-        if has_vocab and has_idf:
-            try:
-                test_result = tfidf_vectorizer.transform(["test lyrics here"])
-                st.success(f"✅ TF-IDF test transform successful: {test_result.shape}")
-            except Exception as test_e:
-                st.error(f"❌ TF-IDF test transform failed: {test_e}")
-        else:
-            st.error("❌ TF-IDF vectorizer is not properly fitted")
-        
         svd_model = joblib.load(f"{MODEL_DIR}/svd2_500.pkl")
         doc2vec_model = Doc2Vec.load(f"{MODEL_DIR}/doc2vec_hiphop.bin")
         
+        # Test TF-IDF vectorizer
+        try:
+            test_result = tfidf_vectorizer.transform(["test lyrics here"])
+            st.success(f"✅ All models loaded successfully! Vocabulary: {len(tfidf_vectorizer.vocabulary_):,}")
+        except Exception as e:
+            st.error(f"❌ TF-IDF test failed: {e}")
+            return None, None, None, None, None, None
+        
         return models, scaler, best_params, tfidf_vectorizer, svd_model, doc2vec_model
+        
     except FileNotFoundError as e:
         st.error(f"Model files not found: {str(e)}")
-        st.error("Please ensure you have saved all required model files:")
-        st.code("""
-Required files:
-- lgbm_optimized_models_latest.pkl
-- feature_scaler_optimized_latest.pkl  
-- best_params_optimized_latest.json
-- tfidf_vectorizer2_100k.pkl
-- svd2_500.pkl
-- doc2vec_hiphop.bin
-        """)
+        st.error("Please ensure you have saved all required model files in the 'models' directory")
         return None, None, None, None, None, None
 
 def clean_lyrics_for_tfidf(lyrics_text):
-    """Clean lyrics text similar to your training preprocessing."""
+    """Clean lyrics text similar to training preprocessing."""
     if not lyrics_text or lyrics_text.strip() == "":
         return ""
     
-    # Basic cleaning (adjust based on your original preprocessing)
     lyrics_clean = lyrics_text.lower()
     lyrics_clean = re.sub(r'[^\w\s]', ' ', lyrics_clean)  # Remove punctuation
     lyrics_clean = re.sub(r'\s+', ' ', lyrics_clean)      # Multiple spaces to single
     lyrics_clean = lyrics_clean.strip()
     
     return lyrics_clean
-
-def extract_audio_features(audio_file, audio_cols=None):
-    """Extract basic audio features matching your training data."""
-    # Default audio columns if not provided (removed 'mode')
-    if audio_cols is None:
-        audio_cols = [
-            'danceability', 'energy', 'key', 'loudness', 'speechiness',
-            'acousticness', 'instrumentalness', 'liveness', 'valence', 'tempo',
-            'duration_ms', 'time_signature'
-        ]
-    
-    # Save uploaded file temporarily
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
-        tmp_file.write(audio_file.read())
-        tmp_path = tmp_file.name
-
-    try:
-        # Load audio file
-        st.info("Loading audio file...")
-        y, sr = librosa.load(tmp_path, sr=22050)
-        st.success(f"✅ Audio loaded: {len(y)} samples at {sr} Hz")
-        
-        features = {}
-        
-        # Extract basic features (approximations of Spotify features)
-        # Duration
-        features['duration_ms'] = len(y) * 1000 / sr
-        
-        # Note: Tempo will be set manually by user, so we skip extraction here
-        
-        # Loudness (approximation)
-        st.info("Extracting loudness...")
-        rms = librosa.feature.rms(y=y)[0]
-        features['loudness'] = float(20 * np.log10(np.mean(rms) + 1e-8))
-        
-        # Energy (approximation)
-        st.info("Extracting energy...")
-        spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
-        features['energy'] = float(np.clip(np.mean(spectral_centroids) / 5000, 0, 1))
-        
-        # Danceability (approximation based on beat strength)
-        st.info("Extracting danceability...")
-        onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
-        features['danceability'] = float(np.clip(len(onset_frames) / (len(y) / sr) / 10, 0, 1))
-        
-        # Acousticness (inverse of spectral centroid)
-        features['acousticness'] = float(np.clip(1 - (np.mean(spectral_centroids) / 5000), 0, 1))
-        
-        # Speechiness (approximation using zero crossing rate)
-        st.info("Extracting speechiness...")
-        zcr = librosa.feature.zero_crossing_rate(y)[0]
-        features['speechiness'] = float(np.clip(np.mean(zcr) * 10, 0, 1))
-        
-        # Instrumentalness (approximation - inverse of vocal activity)
-        st.info("Extracting instrumentalness...")
-        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-        features['instrumentalness'] = float(np.clip(1 - np.var(mfccs) / 100, 0, 1))
-        
-        # Liveness (approximation using spectral flatness)
-        st.info("Extracting liveness...")
-        spectral_flatness = librosa.feature.spectral_flatness(y=y)[0]
-        features['liveness'] = float(np.clip(np.mean(spectral_flatness) * 5, 0, 1))
-        
-        # Valence (approximation using chroma features)
-        st.info("Extracting valence...")
-        chroma = librosa.feature.chroma_stft(y=y, sr=sr)
-        # Major chords (C, E, G) tend to sound happier
-        major_chord_strength = np.mean([chroma[0], chroma[4], chroma[7]])
-        features['valence'] = float(np.clip(major_chord_strength, 0, 1))
-        
-        st.success("✅ All audio features extracted successfully!")
-        return features
-        
-    except Exception as e:
-        st.error(f"Error extracting audio features: {type(e).__name__}: {str(e)}")
-        import traceback
-        st.text("Full traceback:")
-        st.text(traceback.format_exc())
-        return {}
-    finally:
-        # Clean up temporary file
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
 
 def process_lyrics_with_models(lyrics_text, tfidf_vectorizer, svd_model, doc2vec_model):
     """Process lyrics using the trained TF-IDF+SVD and Doc2Vec models."""
@@ -190,83 +70,41 @@ def process_lyrics_with_models(lyrics_text, tfidf_vectorizer, svd_model, doc2vec
     doc2vec_features = np.zeros(300, dtype=np.float32)
     
     if not lyrics_text or lyrics_text.strip() == "":
-        st.warning("No lyrics provided - returning zero vectors")
         return svd_features, doc2vec_features
     
     try:
         # Clean lyrics
         lyrics_clean = clean_lyrics_for_tfidf(lyrics_text)
-        st.info(f"Cleaned lyrics length: {len(lyrics_clean)} characters")
-        st.info(f"Cleaned lyrics sample: '{lyrics_clean[:100]}...'")
         
         if not lyrics_clean:
-            st.warning("Lyrics became empty after cleaning")
             return svd_features, doc2vec_features
         
-        # Comprehensive TF-IDF debugging
-        st.info("=== TF-IDF Transform Debug ===")
-        st.info(f"TF-IDF vectorizer type: {type(tfidf_vectorizer)}")
-        st.info(f"TF-IDF max_features: {getattr(tfidf_vectorizer, 'max_features', 'N/A')}")
-        st.info(f"TF-IDF ngram_range: {getattr(tfidf_vectorizer, 'ngram_range', 'N/A')}")
-        
-        # Check critical attributes again
-        if not hasattr(tfidf_vectorizer, 'vocabulary_'):
-            st.error("❌ TF-IDF vectorizer missing vocabulary_ attribute")
-            return svd_features, doc2vec_features
-            
-        if not hasattr(tfidf_vectorizer, 'idf_'):
-            st.error("❌ TF-IDF vectorizer missing idf_ attribute") 
-            return svd_features, doc2vec_features
-        
-        st.info(f"✅ Vocabulary size: {len(tfidf_vectorizer.vocabulary_)}")
-        st.info(f"✅ IDF array shape: {tfidf_vectorizer.idf_.shape}")
-        
-        # Try the transform
-        st.info("Attempting TF-IDF transform...")
-        try:
-            tfidf_vector = tfidf_vectorizer.transform([lyrics_clean])
-            st.success(f"✅ TF-IDF transform successful: {tfidf_vector.shape}")
-        except Exception as tfidf_error:
-            st.error(f"❌ TF-IDF transform failed: {type(tfidf_error).__name__}: {tfidf_error}")
-            import traceback
-            st.text(traceback.format_exc())
-            return svd_features, doc2vec_features
-        
-        # SVD transform
-        st.info("Attempting SVD transform...")
+        # TF-IDF + SVD processing
+        tfidf_vector = tfidf_vectorizer.transform([lyrics_clean])
         svd_vector = svd_model.transform(tfidf_vector)
         svd_features = svd_vector[0].astype(np.float32)
-        st.success(f"✅ SVD transform successful: {svd_vector.shape}")
         
         # Doc2Vec processing
         words = lyrics_clean.split()
-        if words:  # Only if we have words
+        if words:
             doc2vec_vector = doc2vec_model.infer_vector(words)
             doc2vec_features = doc2vec_vector.astype(np.float32)
-            st.success(f"✅ Doc2Vec successful: {doc2vec_features.shape}")
         
         return svd_features, doc2vec_features
         
     except Exception as e:
-        st.error(f"❌ General error processing lyrics: {type(e).__name__}: {str(e)}")
-        import traceback
-        st.text(traceback.format_exc())
+        st.error(f"Error processing lyrics: {str(e)}")
         return svd_features, doc2vec_features
 
-def predict_hit(models, scaler, audio_features, svd_features, doc2vec_features, 
-                key, time_signature):
+def predict_hit(models, scaler, audio_features, svd_features, doc2vec_features, best_params):
     """Make prediction using the ensemble of models."""
     try:
-        # Prepare audio features in the correct order (removed 'mode')
+        # Prepare audio features in the correct order (13 features including mode)
         audio_feature_order = [
-            'danceability', 'energy', 'key', 'loudness', 'speechiness',
+            'danceability', 'energy', 'key_clean', 'loudness', 'mode_clean', 'speechiness',
             'acousticness', 'instrumentalness', 'liveness', 'valence', 'tempo',
             'duration_ms', 'time_signature'
         ]
-        
-        # Add manual features to audio_features
-        audio_features['key'] = key
-        audio_features['time_signature'] = time_signature
         
         # Create audio feature vector
         audio_vector = np.array([audio_features.get(feat, 0.0) for feat in audio_feature_order], 
@@ -277,9 +115,6 @@ def predict_hit(models, scaler, audio_features, svd_features, doc2vec_features,
         
         # Reshape for prediction
         X_full = X_full.reshape(1, -1)
-        
-        st.info(f"Feature vector shape: {X_full.shape}")
-        st.info(f"Expected features: {scaler.n_features_in_}")
         
         # Scale features
         X_scaled = scaler.transform(X_full)
@@ -292,11 +127,16 @@ def predict_hit(models, scaler, audio_features, svd_features, doc2vec_features,
         
         # Average predictions
         avg_probability = np.mean(predictions)
-        return float(avg_probability)
+        
+        # Apply optimized threshold if available
+        threshold = best_params.get('threshold_optimization', {}).get('best_threshold', 0.5)
+        prediction = 1 if avg_probability >= threshold else 0
+        
+        return float(avg_probability), int(prediction), float(threshold)
         
     except Exception as e:
         st.error(f"Prediction error: {str(e)}")
-        return 0.5
+        return 0.5, 0, 0.5
 
 def main():
     st.set_page_config(page_title="Hip-Hop Hit Predictor", layout="wide")
@@ -310,25 +150,25 @@ def main():
         st.error("Failed to load model components. Please check your model files.")
         return
     
-    st.success("✅ All model components loaded successfully!")
-    
-    # File uploader
-    st.subheader("🎵 Upload Audio File")
-    uploaded_file = st.file_uploader("Choose an audio file", type=['mp3', 'wav', 'flac', 'm4a'])
+    # Display model performance info
+    if best_params and 'performance_metrics' in best_params:
+        perf = best_params['performance_metrics']
+        st.info(f"🎯 Model Performance: AUC {perf.get('cv_auc', 0):.3f} | "
+               f"Optimized with {best_params.get('optimization', {}).get('n_trials', 'N/A')} trials")
     
     # Lyrics input
     st.subheader("📝 Song Lyrics")
-    st.info("Lyrics are crucial for accurate prediction! Your model uses TF-IDF and Doc2Vec text analysis.")
+    st.info("💡 Lyrics are crucial for accurate prediction! The model uses advanced text analysis.")
     lyrics_text = st.text_area(
         "Enter the complete song lyrics:",
         height=200,
         placeholder="Paste your lyrics here. The more complete, the better the prediction...",
-        help="Your model was trained on lyrics processed with TF-IDF and Doc2Vec, so lyrics significantly improve prediction accuracy."
+        help="The model analyzes lyrics using TF-IDF, SVD, and Doc2Vec for comprehensive text understanding."
     )
     
-    # Manual inputs for song information
+    # Song information inputs
     st.subheader("🎼 Song Information")
-    st.info("Enter all song details manually for precise testing:")
+    st.info("💡 Use 0-100 scale for audio features (matching your training data)")
     
     # Basic song info
     col1, col2, col3 = st.columns(3)
@@ -337,229 +177,217 @@ def main():
         key_options = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
         key_name = st.selectbox("Song Key", key_options, index=0)
         key_map = {name: i for i, name in enumerate(key_options)}
-        song_key = key_map[key_name]
+        key_clean = key_map[key_name]
     
     with col2:
-        # User-friendly time signature options
-        time_sig_options = ["3/4 (Waltz)", "4/4 (Common)", "5/4 (Irregular)", "6/8 (Compound)", "7/4 (Complex)"]
-        time_sig_display = st.selectbox("Time Signature", time_sig_options, index=1)
-        # Convert back to numbers for the model
-        time_sig_map = {
-            "3/4 (Waltz)": 3,
-            "4/4 (Common)": 4, 
-            "5/4 (Irregular)": 5,
-            "6/8 (Compound)": 6,
-            "7/4 (Complex)": 7
-        }
-        time_signature = time_sig_map[time_sig_display]
-    
+        mode = st.selectbox("Mode", ["Minor", "Major"], index=1)
+        mode_clean = 0 if mode == "Minor" else 1
+        
     with col3:
-        tempo_bpm = st.number_input("Tempo (BPM)", 
-                                   min_value=60, max_value=200, value=120,
-                                   help="Enter the beats per minute for your song")
+        tempo = st.number_input("Tempo (BPM)", 
+                               min_value=60, max_value=200, value=120,
+                               help="Enter the beats per minute for your song")
     
-    # Manual Spotify Features
-    st.subheader("🎵 Manual Spotify Features")
-    st.info("💡 Tip: Get real Spotify feature values from the Spotify Web API for accurate testing!")
+    # Time signature (2-digit format)
+    time_sig_options = {
+        "3/4 (Waltz)": 34,
+        "4/4 (Common)": 44, 
+        "5/4 (Irregular)": 54,
+        "6/8 (Compound)": 68,
+        "7/4 (Complex)": 74
+    }
+    time_sig_display = st.selectbox("Time Signature", list(time_sig_options.keys()), index=1)
+    time_signature = time_sig_options[time_sig_display]
     
-    # Audio features that are typically 0-1
-    st.markdown("**Musical Characteristics (0.0 - 1.0):**")
+    # Audio features (0-100 scale to match training data)
+    st.subheader("🎵 Audio Features (0-100 Scale)")
+    st.info("💡 Enter values 0-100 (your model was trained on this scale)")
+    
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        danceability = st.number_input("Danceability", min_value=0.0, max_value=1.0, value=0.5, step=0.01,
-                                      help="How suitable a track is for dancing (0.0 = not danceable, 1.0 = very danceable)")
-        energy = st.number_input("Energy", min_value=0.0, max_value=1.0, value=0.5, step=0.01,
-                                help="Perceptual measure of intensity and activity (0.0 = low energy, 1.0 = high energy)")
-        valence = st.number_input("Valence", min_value=0.0, max_value=1.0, value=0.5, step=0.01,
-                                 help="Musical positiveness (0.0 = sad/angry, 1.0 = happy/euphoric)")
+        danceability = st.number_input("Danceability", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
+                                      help="How suitable for dancing (0-100)")
+        energy = st.number_input("Energy", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
+                                help="Intensity and activity (0-100)")
+        valence = st.number_input("Valence", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
+                                 help="Musical positiveness (0-100)")
     
     with col2:
-        acousticness = st.number_input("Acousticness", min_value=0.0, max_value=1.0, value=0.1, step=0.01,
-                                      help="Confidence the track is acoustic (0.0 = not acoustic, 1.0 = acoustic)")
-        speechiness = st.number_input("Speechiness", min_value=0.0, max_value=1.0, value=0.1, step=0.01,
-                                     help="Presence of spoken words (0.0 = no speech, 1.0 = speech-like)")
-        instrumentalness = st.number_input("Instrumentalness", min_value=0.0, max_value=1.0, value=0.1, step=0.01,
-                                          help="Predicts whether track contains no vocals (0.0 = vocals, 1.0 = no vocals)")
+        acousticness = st.number_input("Acousticness", min_value=0.0, max_value=100.0, value=10.0, step=1.0,
+                                      help="Acoustic confidence (0-100)")
+        speechiness = st.number_input("Speechiness", min_value=0.0, max_value=100.0, value=15.0, step=1.0,
+                                     help="Spoken word presence (0-100)")
+        instrumentalness = st.number_input("Instrumentalness", min_value=0.0, max_value=100.0, value=5.0, step=1.0,
+                                          help="Likelihood of no vocals (0-100)")
     
     with col3:
-        liveness = st.number_input("Liveness", min_value=0.0, max_value=1.0, value=0.1, step=0.01,
-                                  help="Detects presence of audience (0.0 = studio, 1.0 = live performance)")
+        liveness = st.number_input("Liveness", min_value=0.0, max_value=100.0, value=15.0, step=1.0,
+                                  help="Live audience presence (0-100)")
     
-    # Other features
+    # Technical features
     st.markdown("**Technical Features:**")
     col1, col2 = st.columns(2)
     
     with col1:
         loudness = st.number_input("Loudness (dB)", min_value=-60.0, max_value=5.0, value=-10.0, step=0.1,
-                                  help="Overall loudness in decibels (typically -60 to 0 dB)")
+                                  help="Overall loudness in decibels")
     
     with col2:
-        duration_ms = st.number_input("Duration (seconds)", min_value=30, max_value=600, value=180, step=1,
-                                     help="Song duration in seconds") * 1000  # Convert to milliseconds
+        duration_seconds = st.number_input("Duration (seconds)", min_value=30, max_value=600, value=180, step=1,
+                                         help="Song duration in seconds")
+        duration_ms = duration_seconds * 1000
     
-    # Option to load from audio or use manual values
-    use_manual_features = st.checkbox("🔧 Use manual feature values (ignore audio analysis)", value=False,
-                                     help="Check this to use only the manual values above, or uncheck to extract from uploaded audio")
+    # Create audio features dictionary
+    audio_features = {
+        'danceability': float(danceability),
+        'energy': float(energy),
+        'key_clean': int(key_clean),
+        'loudness': float(loudness),
+        'mode_clean': int(mode_clean),
+        'speechiness': float(speechiness),
+        'acousticness': float(acousticness),
+        'instrumentalness': float(instrumentalness),
+        'liveness': float(liveness),
+        'valence': float(valence),
+        'tempo': float(tempo),
+        'duration_ms': float(duration_ms),
+        'time_signature': int(time_signature)
+    }
     
-    if uploaded_file is not None:
-        # Display audio player
-        st.audio(uploaded_file, format='audio/mp3')
-        
-        # Extract audio features
-        with st.spinner("Extracting audio features..."):
-            audio_features = extract_audio_features(uploaded_file)
-        
-        if not audio_features:
-            st.error("Failed to extract audio features. Please try a different file.")
-            return
-        
-        # Process lyrics
-        with st.spinner("Processing lyrics with TF-IDF and Doc2Vec models..."):
+    # Display current features
+    st.subheader("📊 Current Feature Summary")
+    cols = st.columns(4)
+    cols[0].metric("Tempo", f"{tempo} BPM")
+    cols[1].metric("Danceability", f"{danceability}/100")
+    cols[2].metric("Energy", f"{energy}/100")
+    cols[3].metric("Valence", f"{valence}/100")
+    
+    with st.expander("📊 View All Features"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Key", f"{key_name} {mode}")
+            st.metric("Time Signature", time_sig_display)
+            st.metric("Duration", f"{duration_seconds}s")
+            st.metric("Loudness", f"{loudness} dB")
+        with col2:
+            st.metric("Acousticness", f"{acousticness}/100")
+            st.metric("Speechiness", f"{speechiness}/100")
+            st.metric("Instrumentalness", f"{instrumentalness}/100")
+            st.metric("Liveness", f"{liveness}/100")
+        with col3:
+            st.info("**Scale Used:**")
+            st.markdown("- Audio features: 0-100")
+            st.markdown("- Key: 0-11 (C=0)")
+            st.markdown("- Mode: 0=Minor, 1=Major")
+            st.markdown("- Time sig: 2-digit (4/4=44)")
+    
+    # Process lyrics
+    if lyrics_text.strip():
+        with st.spinner("Processing lyrics..."):
             svd_features, doc2vec_features = process_lyrics_with_models(
                 lyrics_text, tfidf_vectorizer, svd_model, doc2vec_model
             )
-        
-        # Display extracted features
-        st.subheader("🎵 Audio Features Summary")
-        
-        # Primary features (most important for users to see)
-        st.markdown("**Key Audio Characteristics:**")
-        cols = st.columns(4)
-        cols[0].metric("Tempo", f"{tempo_bpm} BPM", help="User provided")
-        cols[1].metric("Danceability", f"{audio_features.get('danceability', 0):.3f}")
-        cols[2].metric("Energy", f"{audio_features.get('energy', 0):.3f}")
-        cols[3].metric("Valence", f"{audio_features.get('valence', 0):.3f}")
-        
-        # Secondary features (in an expandable section)
-        with st.expander("📊 View All 12 Audio Features"):
-            cols2 = st.columns(3)
-            with cols2[0]:
-                st.metric("Loudness", f"{audio_features.get('loudness', 0):.1f} dB")
-                st.metric("Acousticness", f"{audio_features.get('acousticness', 0):.3f}")
-                st.metric("Speechiness", f"{audio_features.get('speechiness', 0):.3f}")
-                st.metric("Duration", f"{audio_features.get('duration_ms', 0)/1000:.1f} sec")
-            
-            with cols2[1]:
-                st.metric("Instrumentalness", f"{audio_features.get('instrumentalness', 0):.3f}")
-                st.metric("Liveness", f"{audio_features.get('liveness', 0):.3f}")
-                st.metric("Key", f"{key_name}")
-                st.metric("Time Signature", f"{time_sig_display}")
-            
-            with cols2[2]:
-                st.info("**Feature Descriptions:**")
-                st.markdown("""
-                - **Danceability**: How suitable for dancing (0-1)
-                - **Energy**: Intensity and activity (0-1)  
-                - **Valence**: Musical positiveness (0-1)
-                - **Acousticness**: Confidence it's acoustic (0-1)
-                - **Speechiness**: Presence of spoken words (0-1)
-                - **Instrumentalness**: Likelihood of no vocals (0-1)
-                - **Liveness**: Live audience presence (0-1)
-                - **Loudness**: Overall volume in decibels
-                """)
-                
-        st.info("ℹ️ All 12 features are used in the prediction model")
-        
-        # Display feature processing info
-        st.subheader("📊 Feature Processing Status")
-        cols = st.columns(3)
-        cols[0].metric("Audio Features", "12", help="Basic Spotify-like features")
-        cols[1].metric("TF-IDF + SVD Features", "500", help="Text features from lyrics")
-        cols[2].metric("Doc2Vec Features", "300", help="Document embeddings from lyrics")
-        
-        # Show if lyrics were processed
-        if lyrics_text.strip():
-            st.success(f"✅ Lyrics processed: {len(lyrics_text.split())} words")
-        else:
-            st.warning("⚠️ No lyrics provided - using zero vectors for text features")
-        
-        # Prediction button
-        if st.button("🔮 Predict Hit Potential", type="primary", use_container_width=True):
-            with st.spinner("Analyzing your song with full feature set..."):
-                try:
-                    # Debug: Show feature ranges to help identify issues
-                    st.subheader("🔍 Feature Debug Information")
-                    with st.expander("View feature ranges for debugging"):
-                        st.write("**Audio Features:**")
-                        for feat in ['danceability', 'energy', 'valence', 'acousticness', 'speechiness', 'instrumentalness', 'liveness']:
-                            val = audio_features.get(feat, 0)
-                            if not (0 <= val <= 1):
-                                st.warning(f"⚠️ {feat}: {val:.3f} (should be 0-1)")
-                            else:
-                                st.info(f"✅ {feat}: {val:.3f}")
-                        
-                        st.write("**Other Features:**")
-                        st.info(f"Tempo: {tempo_bpm} BPM")
-                        st.info(f"Loudness: {audio_features.get('loudness', 0):.1f} dB")
-                        st.info(f"Duration: {audio_features.get('duration_ms', 0)/1000:.1f} seconds")
-                        
-                        st.write("**Text Features:**")
-                        st.info(f"SVD features (500): min={np.min(svd_features):.3f}, max={np.max(svd_features):.3f}")
-                        st.info(f"Doc2Vec features (300): min={np.min(doc2vec_features):.3f}, max={np.max(doc2vec_features):.3f}")
-                        
-                        if lyrics_text.strip():
-                            st.info(f"Lyrics provided: {len(lyrics_text.split())} words")
-                        else:
-                            st.warning("⚠️ No lyrics provided - this significantly impacts prediction!")
-                    
-                    # Set the manual tempo
-                    audio_features['tempo'] = float(tempo_bpm)
-                    st.info(f"🎵 Using tempo: {tempo_bpm} BPM")
-                    
-                    # Make prediction (removed mode_value parameter)
-                    probability = predict_hit(
-                        models, scaler, audio_features, svd_features, doc2vec_features,
-                        song_key, time_signature
-                    )
-                    
-                    # Display results
-                    st.markdown("---")
-                    st.header("🎯 Prediction Results")
-                    
-                    # Progress bar
-                    st.progress(float(probability))
-                    
-                    # Main result display
-                    col1, col2, col3 = st.columns([1, 2, 1])
-                    
-                    with col2:
-                        if probability > 0.7:
-                            st.success(f"🔥 HIT POTENTIAL: {probability*100:.1f}%")
-                            st.balloons()
-                        elif probability > 0.5:
-                            st.warning(f"⭐ PROMISING: {probability*100:.1f}%")
-                        else:
-                            st.info(f"🌱 DEVELOPING: {probability*100:.1f}%")
-                    
-                    # Interpretation
-                    st.markdown("**What this means:**")
-                    if probability > 0.8:
-                        st.success("🚀 **Strong Hit Potential!** Your song has characteristics similar to chart-topping hits.")
-                    elif probability > 0.6:
-                        st.info("⭐ **Good Potential!** Your song shows promising characteristics.")
-                    elif probability > 0.4:
-                        st.warning("🛠️ **Needs Refinement** This song has some potential but might benefit from adjustments.")
-                    else:
-                        st.error("🔧 **Early Stage** This song is in early development.")
-                    
-                    # Recommendations based on missing features
-                    if not lyrics_text.strip():
-                        st.info("💡 **Tip**: Adding lyrics could significantly improve prediction accuracy!")
-                        
-                except Exception as e:
-                    st.error(f"Error making prediction: {str(e)}")
-                    st.info("Please check that all model files are compatible and properly saved.")
-    
+        st.success(f"✅ Lyrics processed: {len(lyrics_text.split())} words")
     else:
-        st.info("👆 Please upload an audio file to get started!")
+        svd_features = np.zeros(500, dtype=np.float32)
+        doc2vec_features = np.zeros(300, dtype=np.float32)
+        st.warning("⚠️ No lyrics provided - using zero vectors for text features")
+    
+    # Feature processing status
+    st.subheader("🔧 Feature Processing Status")
+    cols = st.columns(3)
+    cols[0].metric("Audio Features", "13", help="Spotify-like features (0-100 scale)")
+    cols[1].metric("TF-IDF + SVD", "500", help="Text features from lyrics")
+    cols[2].metric("Doc2Vec", "300", help="Document embeddings")
+    
+    # Prediction button
+    if st.button("🔮 Predict Hit Potential", type="primary", use_container_width=True):
+        with st.spinner("Analyzing your song..."):
+            try:
+                probability, prediction, threshold = predict_hit(
+                    models, scaler, audio_features, svd_features, doc2vec_features, best_params
+                )
+                
+                # Display results
+                st.markdown("---")
+                st.header("🎯 Prediction Results")
+                
+                # Progress bar
+                st.progress(float(probability))
+                
+                # Main result display
+                col1, col2, col3 = st.columns([1, 2, 1])
+                
+                with col2:
+                    if probability > 0.7:
+                        st.success(f"🔥 HIT POTENTIAL: {probability*100:.1f}%")
+                        st.balloons()
+                    elif probability > 0.5:
+                        st.warning(f"⭐ PROMISING: {probability*100:.1f}%")
+                    else:
+                        st.info(f"🌱 DEVELOPING: {probability*100:.1f}%")
+                
+                # Detailed results
+                st.subheader("📊 Detailed Analysis")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Hit Probability", f"{probability:.3f}")
+                    st.metric("Prediction", "HIT" if prediction == 1 else "NON-HIT")
+                
+                with col2:
+                    st.metric("Threshold Used", f"{threshold:.3f}")
+                    st.metric("Confidence", f"{abs(probability - threshold):.3f}")
+                
+                with col3:
+                    if best_params.get('performance_metrics'):
+                        perf = best_params['performance_metrics']
+                        st.metric("Model AUC", f"{perf.get('cv_auc', 0):.3f}")
+                        st.metric("Model Precision", f"{perf.get('best_precision', 0):.3f}")
+                
+                # Interpretation
+                st.markdown("**Interpretation:**")
+                if probability > 0.8:
+                    st.success("🚀 **Exceptional Potential!** Your song has characteristics very similar to major hits.")
+                elif probability > 0.6:
+                    st.info("⭐ **Strong Potential!** Your song shows many characteristics of successful tracks.")
+                elif probability > 0.4:
+                    st.warning("🛠️ **Room for Improvement** - Consider refining key musical elements.")
+                else:
+                    st.error("🔧 **Early Development** - Song needs significant work to reach hit potential.")
+                
+                # Recommendations
+                st.subheader("💡 Recommendations")
+                if not lyrics_text.strip():
+                    st.info("🎤 **Add lyrics** to significantly improve prediction accuracy!")
+                
+                # Feature analysis
+                if audio_features['speechiness'] < 10:
+                    st.info("🗣️ Consider increasing **speechiness** for hip-hop (typical range: 15-30)")
+                
+                if audio_features['energy'] < 40:
+                    st.info("⚡ Hip-hop tracks typically have higher **energy** (50-80 range)")
+                
+                if audio_features['danceability'] < 50:
+                    st.info("💃 Consider improving **danceability** for broader appeal (60-80 range)")
+                
+            except Exception as e:
+                st.error(f"Error making prediction: {str(e)}")
+                st.info("Please check that all inputs are valid.")
     
     # Footer with model info
     st.markdown("---")
-    st.markdown("**Model Architecture:**")
-    st.markdown("- **Audio Features**: 12 Spotify-like features extracted from audio")
-    st.markdown("- **Text Features**: 500 TF-IDF + SVD dimensions + 300 Doc2Vec dimensions")
-    st.markdown("- **Total Features**: 812 features processed through LightGBM ensemble")
+    st.markdown("**🤖 Model Information:**")
+    if best_params:
+        st.markdown(f"- **Algorithm**: LightGBM Ensemble ({len(models) if models else 0} models)")
+        st.markdown(f"- **Features**: 813 total (13 audio + 500 SVD + 300 Doc2Vec)")
+        st.markdown(f"- **Training**: Clean dataset with lyrics-only tracks")
+        st.markdown(f"- **Scale**: 0-100 for audio features (production-ready)")
+        
+        if 'optimization' in best_params:
+            opt = best_params['optimization']
+            st.markdown(f"- **Optimization**: {opt.get('n_trials', 'N/A')} Optuna trials")
 
 if __name__ == "__main__":
     main()

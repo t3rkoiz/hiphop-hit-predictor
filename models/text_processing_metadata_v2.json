@@ -1,0 +1,34 @@
+{
+  "processing_date": "2025-07-29 22:32:19.417398",
+  "dataset_info": {
+    "total_samples": 210045,
+    "tfidf_svd_features": 500,
+    "doc2vec_features": 300
+  },
+  "tfidf_params": {
+    "max_features": 100000,
+    "min_df": 3,
+    "max_df": 0.8,
+    "ngram_range": [
+      1,
+      2
+    ],
+    "vocabulary_size": 100000
+  },
+  "svd_params": {
+    "n_components": 500,
+    "explained_variance_ratio": 0.21798497438430786
+  },
+  "doc2vec_params": {
+    "vector_size": 300,
+    "window": 5,
+    "min_count": 3,
+    "epochs": 20,
+    "documents_processed": 210039
+  },
+  "deployment_files": [
+    "tfidf_vectorizer2_100k.pkl",
+    "svd2_500.pkl",
+    "doc2vec_hiphop.bin"
+  ]
+}

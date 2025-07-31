@@ -1,0 +1,91 @@
+{
+  "cv_performance": {
+    "oof_auc": 0.4662487265974582,
+    "oof_ap": 0.3345575258240384,
+    "mean_auc": 0.41959558200337566,
+    "std_auc": 0.0034815553837191137,
+    "fold_scores": [
+      {
+        "auc": 0.41565424056040423,
+        "ap": 0.3067657041200081
+      },
+      {
+        "auc": 0.42518196614387,
+        "ap": 0.31116597990571737
+      },
+      {
+        "auc": 0.41921463096952816,
+        "ap": 0.30995812500534514
+      },
+      {
+        "auc": 0.41833149033970013,
+        "ap": 0.31030837711516357
+      }
+    ]
+  },
+  "threshold_tuning": {
+    "target_recall": 0.18,
+    "best_threshold": -1.313102126121521,
+    "best_precision": 0.3566473850841486,
+    "best_recall": 1.0,
+    "tuned_accuracy": 0.3566473850841486,
+    "tuned_f1": 0.5257775734584517
+  },
+  "model_config": {
+    "focal_loss": {
+      "alpha": 0.25,
+      "gamma": 2.0
+    },
+    "lgb_params": {
+      "metric": "auc",
+      "learning_rate": 0.05,
+      "num_leaves": 63,
+      "max_depth": -1,
+      "bagging_fraction": 0.9,
+      "feature_fraction": 0.8,
+      "lambda_l1": 0.1,
+      "lambda_l2": 0.2,
+      "min_data_in_leaf": 20,
+      "device_type": "cpu",
+      "verbose": -1,
+      "seed": 55,
+      "is_unbalance": true,
+      "force_col_wise": true
+    },
+    "cv_folds": 4,
+    "early_stopping": 50
+  },
+  "feature_importance": {
+    "top_audio_features": [
+      [
+        "loudness",
+        196.2628957349807
+      ],
+      [
+        "speechiness",
+        180.65984619688243
+      ],
+      [
+        "danceability",
+        113.10134386876598
+      ],
+      [
+        "duration_ms",
+        40.5140460182447
+      ],
+      [
+        "valence",
+        40.09418484847993
+      ]
+    ],
+    "total_features": 813
+  },
+  "data_info": {
+    "total_samples": 210045,
+    "hit_rate": 0.3566473850841486,
+    "class_distribution": {
+      "0": 135133,
+      "1": 74912
+    }
+  }
+}
