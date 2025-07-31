@@ -103,14 +103,28 @@ def extract_audio_features(audio_file):
         onset_env = librosa.onset.onset_strength(y=y, sr=sr)
         
         # Calculate beat strength (how pronounced the beats are)
-        beat_strength = np.mean(onset_env[beats]) if len(beats) > 0 else np.mean(onset_env)
+        if len(beats) > 0:
+            beat_strength = np.mean(onset_env[beats])
+        else:
+            beat_strength = np.mean(onset_env)
+        
+        # Normalize beat strength (typically ranges from 0 to ~10)
+        normalized_beat_strength = np.clip(beat_strength / 10, 0, 1)
         
         # Tempo factor (120-140 BPM is ideal for dancing)
         tempo_factor = 1.0 - abs(tempo - 130) / 100  # Peaks at 130 BPM
         tempo_factor = np.clip(tempo_factor, 0, 1)
         
-        # Combine factors and scale to 0-100
-        danceability = (beat_strength * 20 + tempo_factor * 30) * 1.5
+        # Beat regularity (how consistent the beat intervals are)
+        if len(beats) > 1:
+            beat_intervals = np.diff(beats)
+            beat_regularity = 1.0 - (np.std(beat_intervals) / (np.mean(beat_intervals) + 1e-6))
+            beat_regularity = np.clip(beat_regularity, 0, 1)
+        else:
+            beat_regularity = 0.5
+        
+        # Combine factors with weights
+        danceability = (normalized_beat_strength * 40 + tempo_factor * 30 + beat_regularity * 30)
         features['danceability'] = float(np.clip(danceability, 0, 100))
         
         # Acousticness (inverse of spectral centroid) - scale to 0-100
@@ -123,8 +137,29 @@ def extract_audio_features(audio_file):
         
         # Instrumentalness (approximation) - scale to 0-100
         st.info("Extracting instrumentalness...")
+        # Use multiple features to detect vocal presence
         mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-        features['instrumentalness'] = float(np.clip(100 - np.var(mfccs), 0, 100))  # Scale to 0-100
+        
+        # Calculate spectral contrast
+        spectral_contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
+        
+        # Higher variance in MFCCs often indicates vocals
+        mfcc_var = np.var(mfccs[1:4], axis=0)  # Focus on lower MFCCs which capture vocal characteristics
+        mean_mfcc_var = np.mean(mfcc_var)
+        
+        # Spectral contrast helps distinguish vocals from instruments
+        mean_contrast = np.mean(spectral_contrast)
+        
+        # Zero crossing rate - vocals typically have higher ZCR
+        zcr = librosa.feature.zero_crossing_rate(y)[0]
+        mean_zcr = np.mean(zcr)
+        
+        # Combine features - higher values suggest vocals (lower instrumentalness)
+        vocal_likelihood = (mean_mfcc_var * 0.4 + mean_contrast * 0.3 + mean_zcr * 1000 * 0.3)
+        
+        # Invert and scale (high vocal likelihood = low instrumentalness)
+        instrumentalness = 100 - (vocal_likelihood * 10)
+        features['instrumentalness'] = float(np.clip(instrumentalness, 0, 100))
         
         # Liveness (approximation using spectral flatness) - scale to 0-100
         st.info("Extracting liveness...")
@@ -251,6 +286,11 @@ def main():
         st.error("Failed to load model components. Please check your model files.")
         return
     
+    # Display model performance info
+    if best_params and 'performance_metrics' in best_params:
+        perf = best_params['performance_metrics']
+        st.info(f"🎯 Model Performance: AUC {perf.get('cv_auc', 0):.3f} | "
+               f"Optimized with {best_params.get('optimization', {}).get('n_trials', 'N/A')} trials")
     
     # File uploader
     st.subheader("🎵 Upload Audio File (Optional)")
@@ -456,7 +496,7 @@ def main():
                     if probability > 0.7:
                         st.success(f"🔥 HIT POTENTIAL: {probability*100:.1f}%")
                         st.balloons()
-                    elif probability >= 0.3:  
+                    elif probability >= 0.3:  # CHANGED: Updated to reflect 30% threshold
                         st.warning(f"⭐ HIT: {probability*100:.1f}%")
                     else:
                         st.info(f"🌱 NON-HIT: {probability*100:.1f}%")
@@ -471,6 +511,8 @@ def main():
                 with col2:
                     st.metric("Prediction", "HIT" if prediction == 1 else "NON-HIT")
                 
+                # Show threshold info
+                st.info(f"ℹ️ Using threshold: 30% - Songs need ≥30% probability to be classified as HITs")
                 
                 # Interpretation
                 st.markdown("**Interpretation:**")
@@ -478,10 +520,10 @@ def main():
                     st.success("🚀 **Exceptional Potential!** Your song has characteristics very similar to major hits.")
                 elif probability > 0.6:
                     st.info("⭐ **Strong Potential!** Your song shows many characteristics of successful tracks.")
-                elif probability >= 0.3:  # CHANGED: Updated for 30% threshol
-                    st.warning("✅ **Hit Classification** - Your song meets the criteria for a hit track, but may need refinement.")
+                elif probability >= 0.3:  # CHANGED: Updated for 30% threshold
+                    st.warning("✅ **Hit Classification** - Your song meets the criteria for a hit track.")
                 else:
-                    st.error("🔧 **Non-Hit** - Song falls below the hit threshold.")
+                    st.error("🔧 **Non-Hit** - Song falls below the 30% hit threshold.")
                 
                 # Recommendations
                 st.subheader("💡 Recommendations")
@@ -509,5 +551,8 @@ def main():
         st.markdown(f"- **Algorithm**: LightGBM Ensemble ({len(models) if models else 0} models)")
         st.markdown(f"- **Features**: 813 total (13 audio + 500 SVD + 300 Doc2Vec)")
         st.markdown(f"- **Training**: Hip-hop dataset with lyrics analysis")
+        st.markdown(f"- **Scale**: 0-100 for audio features")
+        st.markdown(f"- **Hit Threshold**: 30% probability")
+
 if __name__ == "__main__":
     main()
