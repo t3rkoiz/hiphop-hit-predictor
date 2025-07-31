@@ -140,25 +140,43 @@ def extract_audio_features(audio_file):
         # Use multiple features to detect vocal presence
         mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
         
-        # Calculate spectral contrast
-        spectral_contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
+        # Calculate spectral rolloff - vocals typically have energy in mid frequencies
+        spectral_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
+        rolloff_mean = np.mean(spectral_rolloff)
         
-        # Higher variance in MFCCs often indicates vocals
-        mfcc_var = np.var(mfccs[1:4], axis=0)  # Focus on lower MFCCs which capture vocal characteristics
-        mean_mfcc_var = np.mean(mfcc_var)
+        # Spectral flatness - vocals are less flat than pure instruments
+        spectral_flatness = librosa.feature.spectral_flatness(y=y)[0]
+        flatness_mean = np.mean(spectral_flatness)
         
-        # Spectral contrast helps distinguish vocals from instruments
-        mean_contrast = np.mean(spectral_contrast)
+        # MFCC statistics - focus on coefficients that capture vocal formants
+        mfcc_delta = np.diff(mfccs[1:5], axis=1)  # Temporal changes in lower MFCCs
+        mfcc_delta_energy = np.mean(np.abs(mfcc_delta))
         
-        # Zero crossing rate - vocals typically have higher ZCR
-        zcr = librosa.feature.zero_crossing_rate(y)[0]
-        mean_zcr = np.mean(zcr)
+        # Normalize features to 0-1 range
+        # Rolloff: typically 1000-8000 Hz, normalize assuming 8000 Hz max
+        rolloff_norm = np.clip(rolloff_mean / 8000, 0, 1)
         
-        # Combine features - higher values suggest vocals (lower instrumentalness)
-        vocal_likelihood = (mean_mfcc_var * 0.4 + mean_contrast * 0.3 + mean_zcr * 1000 * 0.3)
+        # Flatness: already 0-1 range
+        flatness_norm = flatness_mean
         
-        # Invert and scale (high vocal likelihood = low instrumentalness)
-        instrumentalness = 100 - (vocal_likelihood * 10)
+        # MFCC delta: normalize based on typical range (0-2)
+        mfcc_norm = np.clip(mfcc_delta_energy / 2, 0, 1)
+        
+        # Debug info
+        st.text(f"Debug - Rolloff: {rolloff_mean:.1f}, Flatness: {flatness_mean:.4f}, MFCC delta: {mfcc_delta_energy:.4f}")
+        
+        # Estimate instrumentalness
+        # High flatness + low MFCC variation + specific rolloff = more instrumental
+        # Typical instrumental music has higher flatness and lower MFCC variation
+        instrumentalness_score = (
+            flatness_norm * 50 +  # High flatness suggests instrumental
+            (1 - mfcc_norm) * 30 +  # Low MFCC variation suggests no vocals
+            (0.5 - abs(rolloff_norm - 0.5)) * 20  # Mid-range rolloff
+        )
+        
+        # Add some baseline to avoid always getting 0
+        instrumentalness = instrumentalness_score + 5  # Small baseline
+        
         features['instrumentalness'] = float(np.clip(instrumentalness, 0, 100))
         
         # Liveness (approximation using spectral flatness) - scale to 0-100
