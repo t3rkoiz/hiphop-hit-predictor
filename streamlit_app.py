@@ -251,11 +251,6 @@ def main():
         st.error("Failed to load model components. Please check your model files.")
         return
     
-    # Display model performance info
-    if best_params and 'performance_metrics' in best_params:
-        perf = best_params['performance_metrics']
-        st.info(f"🎯 Model Performance: AUC {perf.get('cv_auc', 0):.3f} | "
-               f"Optimized with {best_params.get('optimization', {}).get('n_trials', 'N/A')} trials")
     
     # File uploader
     st.subheader("🎵 Upload Audio File (Optional)")
@@ -476,8 +471,6 @@ def main():
                 with col2:
                     st.metric("Prediction", "HIT" if prediction == 1 else "NON-HIT")
                 
-                # Show threshold info
-                st.info(f"ℹ️ Using threshold: 30% - Songs need ≥30% probability to be classified as HITs")
                 
                 # Interpretation
                 st.markdown("**Interpretation:**")
