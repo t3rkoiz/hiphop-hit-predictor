@@ -435,7 +435,7 @@ def main():
                 duration_ms = float(extracted_features.get('duration_ms', 180000))
                 duration_seconds = int(duration_ms / 1000)
                 
-                st.info(f"🔊 Extracted Loudness: {loudness:.1f} dB")
+                st.info(f"🔊 Extracted Loudness: {loudness:.1f}")
                 st.info(f"⏱️ Extracted Duration: {duration_seconds} seconds")
             else:
                 st.error("Failed to extract audio features. Please enter manually.")
