@@ -469,16 +469,11 @@ def main():
                                          help="Overall loudness of the mix (0 dB = full scale)")
     
     
-    
-
-
-
-
 
             
         # Technical features
         st.markdown("**Technical Features:**")
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2)  
         
         with col1:
             
