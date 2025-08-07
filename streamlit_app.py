@@ -1,4 +1,3 @@
-
 import streamlit as st
 import librosa
 import numpy as np
@@ -384,6 +383,10 @@ def main():
         st.info(f"🎯 Model Performance: AUC {perf.get('cv_auc', 0):.3f} | "
                f"Optimized with {best_params.get('optimization', {}).get('n_trials', 'N/A')} trials")
     
+    # Initialize default values
+    loudness = -10.0  # Default loudness value
+    duration_ms = 180000  # Default duration
+    
     # File uploader
     st.subheader("🎵 Upload Audio File (Optional)")
     uploaded_file = st.file_uploader("Choose an audio file", type=['mp3', 'wav', 'flac', 'm4a'])
@@ -428,11 +431,11 @@ def main():
                                              value=float(extracted_features.get('valence', 50)), step=1.0)
                 
                 # Use extracted loudness and duration
-                loudness = float(extracted_features.get('loudness', -10))
+                loudness = float(extracted_features.get('loudness', 0.5))  # This is already normalized 0-1
                 duration_ms = float(extracted_features.get('duration_ms', 180000))
                 duration_seconds = int(duration_ms / 1000)
                 
-                st.info(f"🔊 Extracted Loudness: {loudness:.1f} dB")
+                st.info(f"🔊 Extracted Loudness: {loudness:.3f} (normalized)")
                 st.info(f"⏱️ Extracted Duration: {duration_seconds} seconds")
             else:
                 st.error("Failed to extract audio features. Please enter manually.")
@@ -467,24 +470,20 @@ def main():
         with col4:
             loudness_db = st.number_input("Loudness (dB)",min_value=-60.0,max_value=5.0,value=-10.0,step=0.1,
                                          help="Overall loudness of the mix (0 dB = full scale)")
+            valence = st.number_input("Valence", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
+                                     help="Musical positiveness (0-100)")
     
-    
-
-            
         # Technical features
         st.markdown("**Technical Features:**")
         col1, col2 = st.columns(2)  
         
         with col1:
-            
-            valence = st.number_input("Valence", min_value=0.0, max_value=100.0, value=50.0, step=1.0,
-                                     help="Musical positiveness (0-100)")
-        
-        
-        with col2:
             duration_seconds = st.number_input("Duration (seconds)", min_value=30, max_value=600, value=180, step=1,
                                              help="Song duration in seconds")
             duration_ms = duration_seconds * 1000
+        
+        # Convert loudness from dB to normalized 0-1 value for manual input
+        loudness = np.clip((loudness_db + 60) / 60, 0.0, 1.0)
     
     # Lyrics input
     st.subheader("📝 Song Lyrics")
@@ -528,23 +527,6 @@ def main():
     time_sig_display = st.selectbox("Time Signature", list(time_sig_options.keys()), index=1)
     time_signature = time_sig_options[time_sig_display]
     
-    # Create audio features dictionary
-    audio_features = {
-        'danceability': float(danceability),
-        'energy': float(energy),
-        'key_clean': int(key_clean),
-        'loudness': float(loudness),
-        'mode_clean': int(mode_clean),
-        'speechiness': float(speechiness),
-        'acousticness': float(acousticness),
-        'instrumentalness': float(instrumentalness),
-        'liveness': float(liveness),
-        'valence': float(valence),
-        'tempo': float(tempo),  # Now using normalized 0-1 value
-        'duration_ms': float(duration_ms),
-        'time_signature': int(time_signature)
-    }
-    
     # Process lyrics
     if lyrics_text.strip():
         with st.spinner("Processing lyrics..."):
@@ -561,30 +543,22 @@ def main():
     if st.button("🔮 Predict Hit Potential", type="primary", use_container_width=True):
         with st.spinner("Analyzing your song..."):
             try:
-                # Create audio features dictionary here (after all variables are defined)
-                # Convert loudness from dB to 0-1 and tempo from BPM to 0-1
-                if uploaded_file is not None and use_extracted == "Extract from uploaded audio":
-                    # Use extracted loudness (already 0-1)
-                    loudness_norm = loudness
-                else:
-                    # Convert from user input
-                    loudness_norm = np.clip((loudness_db + 60) / 60, 0.0, 1.0)
-                
-                # Tempo is always in BPM, convert to 0-1
+                # Convert tempo from BPM to normalized 0-1 value
                 tempo_norm = tempo / 200.0
                 
+                # Create audio features dictionary
                 audio_features = {
                     'danceability': float(danceability),
                     'energy': float(energy),
                     'key_clean': int(key_clean),
-                    'loudness': float(loudness_norm),
+                    'loudness': float(loudness),  # Already normalized 0-1
                     'mode_clean': int(mode_clean),
                     'speechiness': float(speechiness),
                     'acousticness': float(acousticness),
                     'instrumentalness': float(instrumentalness),
                     'liveness': float(liveness),
                     'valence': float(valence),
-                    'tempo': float(tempo_norm),
+                    'tempo': float(tempo_norm),  # Normalized 0-1
                     'duration_ms': float(duration_ms),
                     'time_signature': int(time_signature)
                 }
