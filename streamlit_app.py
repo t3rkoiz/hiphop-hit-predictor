@@ -565,7 +565,7 @@ def main():
             try:
                 # Convert tempo from BPM to normalized 0-1 value
                 tempo_norm = tempo / 200.0
-                
+
                 # Create audio features dictionary
                 audio_features = {
                     'danceability': float(danceability),
@@ -582,21 +582,21 @@ def main():
                     'duration_ms': float(duration_ms),
                     'time_signature': int(time_signature)
                 }
-                
+
                 probability, prediction, threshold = predict_hit(
                     models, scaler, audio_features, svd_features, doc2vec_features, best_params
                 )
-                
+
                 # Display results
                 st.markdown("---")
                 st.header("🎯 Prediction Results")
-                
+
                 # Progress bar
                 st.progress(float(probability))
-                
+
                 # Main result display
                 col1, col2, col3 = st.columns([1, 2, 1])
-                
+
                 with col2:
                     if probability > 0.7:
                         st.success(f"🔥 HIT POTENTIAL: {probability*100:.1f}%")
@@ -605,24 +605,24 @@ def main():
                         st.warning(f"⭐ HIT: {probability*100:.1f}%")
                     else:
                         st.info(f"🌱 NON-HIT: {probability*100:.1f}%")
-                
+
                 # Simple metrics
                 st.subheader("📊 Analysis")
                 col1, col2 = st.columns(2)
-                
+
                 with col1:
                     st.metric("Hit Probability", f"{probability*100:.1f}%")
-                
+
                 with col2:
                     st.metric("Prediction", "HIT" if prediction == 1 else "NON-HIT")
-                
+
                 # Show threshold info with lyrics context
                 has_lyrics = not (np.all(svd_features == 0) and np.all(doc2vec_features == 0))
                 if has_lyrics:
                     st.info(f"ℹ️ Using standard threshold: {threshold*100:.0f}% (with lyrics)")
                 else:
                     st.warning(f"⚠️ Using higher threshold: {threshold*100:.0f}% (no lyrics - penalty applied)")
-                
+
                 # Interpretation
                 st.markdown("**Interpretation:**")
                 if probability > 0.8:
@@ -639,10 +639,10 @@ def main():
                         st.error("🔧 **Non-Hit** - Song falls below the hit threshold.")
                     else:
                         st.error("🔧 **Non-Hit** - Song falls below the elevated threshold for no-lyrics predictions.")
-                
+
                 # Recommendations
                 st.subheader("💡 Recommendations")
-                
+
                 # Primary recommendation for missing lyrics
                 if not has_lyrics:
                     st.error("🎤 **CRITICAL: Add lyrics!** This is the #1 way to improve your prediction:")
@@ -652,21 +652,21 @@ def main():
                     st.markdown("- **More accurate prediction** based on complete song information")
                 else:
                     st.success("✅ **Lyrics provided:** Model using full analytical capability")
-                
+
                 # Audio feature recommendations
                 if audio_features['speechiness'] < 10:
                     st.info("🗣️ Consider increasing **speechiness** for hip-hop (typical range: 15-30)")
-                
+
                 if audio_features['energy'] < 40:
                     st.info("⚡ Hip-hop tracks typically have higher **energy** (50-80 range)")
-                
+
                 if audio_features['danceability'] < 50:
                     st.info("💃 Consider improving **danceability** for broader appeal (60-80 range)")
-                
+
                 # Show feature contribution info
                 st.subheader("🔍 Model Insights")
                 col1, col2 = st.columns(2)
-                
+
                 with col1:
                     st.markdown("**Feature Contributions:**")
                     st.markdown(f"- Audio features: 13 features")
@@ -676,7 +676,7 @@ def main():
                     else:
                         st.markdown(f"- Text features: 800 zero-padded features")
                         st.markdown("- **Reduced power:** Audio-only prediction")
-                
+
                 with col2:
                     st.markdown("**Prediction Adjustments:**")
                     if has_lyrics:
@@ -687,11 +687,11 @@ def main():
                         st.markdown("- ⚠️ 30% probability penalty")
                         st.markdown("- ⚠️ Elevated 50% threshold")
                         st.markdown("- ⚠️ Reduced confidence")
-                
+
             except Exception as e:
                 st.error(f"Error making prediction: {str(e)}")
                 st.info("Please check that all inputs are valid.")
-    
+
     # Footer with model info
     st.markdown("---")
     st.markdown("**🤖 Model Information:**")
@@ -700,6 +700,8 @@ def main():
         st.markdown(f"- **Features**: 813 total (13 audio + 500 SVD + 300 Doc2Vec)")
         st.markdown(f"- **Training**: Hip-hop dataset with lyrics analysis")
         st.markdown(f"- **Scale**: 0-100 for audio features")
+        st.markdown(f"- **Thresholds**: 30% (with lyrics) / 50% (without lyrics)")
+        st.markdown(f"- **Penalty**: -30% probability when lyrics missing")
 
-    if __name__ == "__main__":
-        main()
+if __name__ == "__main__":
+   main()
